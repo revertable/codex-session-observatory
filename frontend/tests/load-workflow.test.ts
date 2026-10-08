@@ -69,6 +69,24 @@ const responseWithToolCall: ParseResponseDto = {
   },
 }
 
+test('canonical question stays Codex while tool call and user message keep their filters', () => {
+  const response: ParseResponseDto = structuredClone(responseWithToolCall)
+  const question = 'Choose?\n- a\n- b'
+  response.parsed_chat_log.entries[1].content = question
+  response.parsed_chat_log.transcript_blocks[1].content = question
+  response.parsed_chat_log.entries[0].content = 'a'
+  response.parsed_chat_log.transcript_blocks[0].content = 'a'
+  response.parsed_chat_log.entries[2].content = 'Function call: request_user_input_async'
+  const loaded = applyParseResponse(createInitialLoadWorkflowState(), response)
+  assert.deepEqual(loaded.observations.transcript_blocks.map((entry) => [entry.entry_type, entry.content]), [
+    ['you', 'a'], ['codex', question],
+  ])
+  const tools = updateFilter(loaded, 'show_tool_call', true)
+  assert.deepEqual(tools.observations.transcript_blocks.map((entry) => entry.entry_type), ['you', 'codex', 'tool_call'])
+  const hidden = updateFilter(loaded, 'show_codex', false)
+  assert.deepEqual(hidden.observations.transcript_blocks.map((entry) => [entry.entry_type, entry.content]), [['you', 'a']])
+})
+
 test('initial load preserves all observations before applying display filters', async () => {
   let requestedPath: string | undefined
   let requestedFilter: typeof sourceLoadFilterState | undefined

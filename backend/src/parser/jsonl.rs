@@ -65,6 +65,7 @@ enum CandidateSource {
     ResponseToolCall,
     EventUserMessage,
     EventAgentMessage,
+    EventUserQuestion,
     EventSystem,
     Fallback,
 }
@@ -74,7 +75,7 @@ impl CandidateSource {
         match self {
             Self::ResponseMessage | Self::ResponseToolResult => 4,
             Self::EventToolResult | Self::ResponseToolCall | Self::EventUserMessage => 3,
-            Self::EventAgentMessage | Self::EventSystem => 2,
+            Self::EventAgentMessage | Self::EventUserQuestion | Self::EventSystem => 2,
             Self::Fallback => 1,
         }
     }
@@ -111,6 +112,8 @@ struct EnvelopeFields<'a> {
 
 #[derive(Deserialize)]
 struct PayloadFields<'a> {
+    #[serde(borrow)]
+    item: Option<&'a RawValue>,
     #[serde(rename = "type", borrow)]
     type_name: Option<&'a RawValue>,
     #[serde(borrow)]
@@ -345,6 +348,11 @@ fn extract_typed_focused_seed<'a>(
     }
 
     let payload = payload?;
+    if top_type == Some("event_msg") && payload_type == Some("item_completed") {
+        let item: Value = serde_json::from_str(payload.item?.get()).ok()?;
+        item.get("questions")?;
+        return Some(question_seed(&item, typed_timestamp(envelope)));
+    }
     let source = match (top_type, payload_type) {
         (Some("event_msg"), Some("user_message")) => CandidateSource::EventUserMessage,
         (Some("event_msg"), Some("agent_message")) => CandidateSource::EventAgentMessage,
@@ -717,6 +725,12 @@ fn extract_focused_seed(value: &Value) -> Option<Option<CandidateSeed<'static>>>
     let payload = value.get("payload")?;
     let payload_type = string_field(payload, "type");
 
+    if top_type == "event_msg" && payload_type == Some("item_completed") {
+        let item = payload.get("item")?;
+        item.get("questions")?;
+        return Some(question_seed(item, timestamp(value)));
+    }
+
     let source = match (top_type, payload_type) {
         ("event_msg", Some("user_message")) => CandidateSource::EventUserMessage,
         ("event_msg", Some("agent_message")) => CandidateSource::EventAgentMessage,
@@ -781,6 +795,44 @@ fn extract_focused_seed(value: &Value) -> Option<Option<CandidateSeed<'static>>>
         stable_id: focused_stable_id(payload_type, payload),
         timestamp: timestamp(value).or_else(|| timestamp(payload)),
     }))
+}
+
+fn question_seed(item: &Value, timestamp: Option<String>) -> Option<CandidateSeed<'static>> {
+    let questions = item.get("questions")?.as_array()?;
+    let mut parts = Vec::new();
+    for question in questions {
+        let title = question.get("title")?.as_str()?;
+        if title.trim().is_empty() {
+            return None;
+        }
+        let mut content = title.to_owned();
+        match question.get("options") {
+            None | Some(Value::Null) => {}
+            Some(Value::Array(options)) => {
+                for option in options {
+                    content.push_str("\n- ");
+                    content.push_str(option.as_str()?);
+                }
+            }
+            _ => return None,
+        }
+        parts.push(content);
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(CandidateSeed {
+        entry: CandidateEntry::Ready(RenderedEntry {
+            kind: RenderedEntryKind::Codex,
+            content: parts.join("\n\n"),
+        }),
+        source: CandidateSource::EventUserQuestion,
+        stable_id: string_field(item, "id")
+            .filter(|id| !id.trim().is_empty())
+            .map(|id| format!("question:{id}")),
+        timestamp,
+        is_user_message: false,
+    })
 }
 
 fn extract_fallback_seeds(value: &Value) -> Vec<CandidateSeed<'static>> {
@@ -931,6 +983,11 @@ fn should_suppress_adjacent_duplicate(
     previous: &ParsedCandidate,
     candidate: &ParsedCandidate,
 ) -> bool {
+    if previous.source == CandidateSource::EventUserQuestion
+        || candidate.source == CandidateSource::EventUserQuestion
+    {
+        return false;
+    }
     if previous.entry.kind != candidate.entry.kind
         || !normalized_text_eq(&previous.entry.content, &candidate.entry.content)
     {
@@ -2642,6 +2699,125 @@ mod tests {
             parse_str(&input),
             parse_legacy_for_differential_test(&input)
         );
+    }
+
+    fn question_line(id: &str, questions: Value) -> String {
+        serde_json::json!({
+            "timestamp": "2026-10-08T08:50:52.772Z",
+            "type": "event_msg",
+            "payload": {"type": "item_completed", "turn_id": "turn-1", "item": {
+                "type": "AgentMessage", "id": id, "questions": questions,
+                "content": [{"type": "Text", "text": "must not be used"}]
+            }}
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn canonical_questions_preserve_text_order_and_free_input() {
+        let input = question_line(
+            "call-question",
+            serde_json::json!([
+                {"title":"Choose?", "options":["Second", "First"]},
+                {"title":"Free input", "options":null},
+                {"title":"Missing options"},
+                {"title":"Empty options", "options":[]}
+            ]),
+        );
+        let parsed = parse_str(&input);
+        assert_eq!(parsed.entries.len(), 1);
+        assert_eq!(parsed.entries[0].kind, RenderedEntryKind::Codex);
+        assert_eq!(
+            parsed.entries[0].content,
+            "Choose?\n- Second\n- First\n\nFree input\n\nMissing options\n\nEmpty options"
+        );
+        assert_eq!(
+            parsed.entry_timestamps[0].as_deref(),
+            Some("2026-10-08T08:50:52.772Z")
+        );
+        assert_eq!(parsed.parsed_candidates, 1);
+        assert_eq!(parsed.ignored_lines, 0);
+        assert_eq!(parsed.observed_event_counts["event_msg/item_completed"], 1);
+        assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+    }
+
+    #[test]
+    fn invalid_question_events_do_not_fabricate_content() {
+        for questions in [
+            serde_json::json!([]),
+            serde_json::json!(null),
+            serde_json::json!([{"options":["a"]}]),
+            serde_json::json!([{"title":" "}]),
+            serde_json::json!([{"title":"q", "options":"bad"}]),
+            serde_json::json!([{"title":"q", "options":[{"label":"a"}]}]),
+        ] {
+            let input = question_line("question", questions);
+            let parsed = parse_str(&input);
+            assert!(parsed.entries.is_empty());
+            assert_eq!(parsed.ignored_lines, 1);
+            assert_eq!(parsed.malformed_lines, 0);
+            assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+        }
+        let input = r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","content":[{"text":"unchanged"}]}}}"#;
+        assert!(parse_str(input).entries.is_empty());
+        let legacy = r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage"}},"message":{"role":"assistant","content":"legacy fallback"}}"#;
+        assert_eq!(parse_str(legacy).entries[0].content, "legacy fallback");
+        assert_eq!(
+            parse_str(legacy),
+            parse_legacy_for_differential_test(legacy)
+        );
+    }
+
+    #[test]
+    fn question_and_tool_call_remain_independent_without_pairing() {
+        let call = response_item_line(
+            "function_call",
+            serde_json::json!({
+                "name":"request_user_input_async", "call_id":"call-question", "id":"fc-1",
+                "arguments":"{\"questions\":[{\"title\":\"tool only\"}]}"
+            }),
+        );
+        assert_eq!(
+            parse_str(&call).entries[0].kind,
+            RenderedEntryKind::ToolCall
+        );
+        assert_eq!(parse_str(&call).entries.len(), 1);
+        let input = [call, "{\"type\":\"unrelated\"}".to_owned(),
+            question_line("call-question", serde_json::json!([{"title":"canonical", "options":["a","b"]}])),
+            r#"{"type":"response_item","payload":{"type":"message","role":"user","turn_id":"turn-1","content":"a"}}"#.to_owned(),
+            r#"{"type":"response_item","payload":{"type":"message","role":"user","turn_id":"turn-2","content":"b"}}"#.to_owned()
+        ].join("\n");
+        let parsed = parse_str(&input);
+        assert_eq!(
+            parsed
+                .entries
+                .iter()
+                .map(|entry| entry.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                RenderedEntryKind::ToolCall,
+                RenderedEntryKind::Codex,
+                RenderedEntryKind::You,
+                RenderedEntryKind::You
+            ]
+        );
+        assert_eq!(parsed.entries[1].content, "canonical\n- a\n- b");
+        assert!(parsed.entries[0].content.contains("tool only"));
+        assert_eq!(parsed.entries[2].content, "a");
+        assert_eq!(parsed.entries[3].content, "b");
+        assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+    }
+
+    #[test]
+    fn questions_do_not_merge_by_text_timestamp_or_turn() {
+        let first = question_line("first", serde_json::json!([{"title":"same"}]));
+        let second = question_line("second", serde_json::json!([{"title":"same"}]));
+        let ordinary = r#"{"timestamp":"2026-10-08T08:50:52.772Z","type":"response_item","payload":{"type":"message","id":"ordinary","role":"assistant","content":"same"}}"#;
+        let input = [first.clone(), second, ordinary.to_owned(), first].join("\n");
+        let parsed = parse_str(&input);
+        assert_eq!(parsed.entries.len(), 3);
+        assert!(parsed.entries.iter().all(|entry| entry.content == "same"));
+        assert_eq!(parsed, parse_legacy_for_differential_test(&input));
     }
 
     #[test]

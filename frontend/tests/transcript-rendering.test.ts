@@ -45,6 +45,24 @@ const observedEventCounts = [
   { event: 'event_a', count: 2 },
 ]
 
+test('question text and ordered options survive every capture presentation', () => {
+  const content = 'Choose?\n- second\n- first'
+  const question: TranscriptBlockDto = {
+    entry_type: 'codex', label: '[CODEX]', title: '[CODEX]', timestamp: null, content,
+  }
+  for (const theme of ['Terminal Style', 'Markdown Style', 'DM Style', 'DM Style (Dark)'] as const) {
+    const captured = serializeTranscript({
+      theme, blocks: [question], references: [], observedEventCounts: [], collapsedBlocks: {},
+    })
+    assert.ok(captured.includes(content))
+    assert.equal(captured.split(content).length - 1, 1)
+    const collapsed = serializeTranscript({
+      theme, blocks: [question], references: [], observedEventCounts: [], collapsedBlocks: { 0: true },
+    })
+    assert.ok(!collapsed.includes(content))
+  }
+})
+
 test('Terminal capture includes references, separators, expanded content, and collapsed headers', () => {
   const transcript = serializeTranscript({
     theme: 'Terminal Style',

@@ -1181,6 +1181,33 @@ mod tests {
     }
 
     #[test]
+    fn canonical_question_projects_as_codex_with_existing_filter() {
+        let parsed = crate::parser::jsonl::parse_str(concat!(
+            "{\"timestamp\":\"2026-10-08T08:50:52.772Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"id\":\"call-question\",\"questions\":[{\"title\":\"Choose?\",\"options\":[\"a\",\"b\"]}]}}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"a\"}}"
+        ));
+        let dto = project_parsed_chat_log(&parsed, None);
+        assert_eq!(dto.entries.len(), 2);
+        assert_eq!(dto.entries[0].kind, EntryKindDto::Codex);
+        assert_eq!(
+            dto.transcript_blocks[0].content.as_str(),
+            "Choose?\n- a\n- b"
+        );
+        assert_eq!(
+            dto.transcript_blocks[0].timestamp.as_deref(),
+            Some("2026-10-08T08:50:52.772Z")
+        );
+        assert_eq!(dto.entries[1].kind, EntryKindDto::You);
+        let filter = FilterDto {
+            show_codex: false,
+            ..FilterDto::default()
+        };
+        let hidden = project_parsed_chat_log(&parsed, Some(filter));
+        assert_eq!(hidden.entries.len(), 1);
+        assert_eq!(hidden.entries[0].kind, EntryKindDto::You);
+    }
+
+    #[test]
     fn transport_boundary_projects_explicit_filter_without_reparse() {
         let dto = project_parsed_chat_log(
             &parsed_log(),
