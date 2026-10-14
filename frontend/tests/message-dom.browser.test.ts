@@ -1,4 +1,5 @@
 import { after, before, test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { startClientHarness } from './helpers/client-dom-harness.ts'
 
 let harness: Awaited<ReturnType<typeof startClientHarness>>
@@ -15,3 +16,12 @@ for (const name of [
     await harness.evaluate(`globalThis.__domCases[${JSON.stringify(name)}]()`)
   })
 }
+
+
+test('App retains transcript through refresh, append and failure while preserving initial load', { timeout: 60000 }, async () => {
+  const refreshHarness = await startClientHarness({
+    entry: fileURLToPath(new URL('./helpers/refresh-client.ts', import.meta.url)).replaceAll('\\', '/'),
+  })
+  try { await refreshHarness.evaluate('globalThis.__refreshCase()') }
+  finally { await refreshHarness.close() }
+})

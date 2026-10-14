@@ -390,9 +390,9 @@
       {:else if renderPathForTheme(selectedTheme) === 'terminal'}
         <TerminalTranscript
           theme={selectedTheme}
-          isLoaded={workflow.status === 'loaded'}
+          isLoaded={workflow.loaded_file.metadata !== null}
           {publicReleaseStatus}
-          showIdentityNote={workflow.status !== 'loaded'}
+          showIdentityNote={workflow.loaded_file.metadata === null}
           observedEventCounts={workflow.loaded_file.observed_event_counts}
           blocks={workflow.observations.transcript_blocks}
           references={workflow.observations.referenced_conversations}
@@ -402,7 +402,7 @@
       {:else if renderPathForTheme(selectedTheme) === 'markdown'}
         <MarkdownTranscript
           theme={selectedTheme}
-          isLoaded={workflow.status === 'loaded'}
+          isLoaded={workflow.loaded_file.metadata !== null}
           {publicReleaseStatus}
           observedEventCounts={workflow.loaded_file.observed_event_counts}
           blocks={workflow.observations.transcript_blocks}
@@ -413,7 +413,7 @@
       {:else}
         <ChatTranscript
           theme={selectedTheme as 'DM Style' | 'DM Style (Dark)'}
-          isLoaded={workflow.status === 'loaded'}
+          isLoaded={workflow.loaded_file.metadata !== null}
           {publicReleaseStatus}
           observedEventCounts={workflow.loaded_file.observed_event_counts}
           blocks={workflow.observations.transcript_blocks}

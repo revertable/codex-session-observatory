@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import {
   applyParseResponse,
+  beginLoad,
+  failLoad,
+  selectPath,
   createInitialLoadWorkflowState,
   defaultFilterState,
   loadAllObservations,
@@ -142,4 +145,32 @@ test('initial load preserves all observations before applying display filters', 
     ['2026-09-18T23:59:58Z', '2026-09-19T00:00:02Z', null],
   )
   assert.deepEqual(toolCallsVisible.all_observations, loaded.all_observations)
+})
+
+
+test('refresh pending and failure retain the successful result; initial load remains empty', () => {
+  const initial = selectPath(createInitialLoadWorkflowState(), 'session.jsonl')
+  const error = { code: 'read_failed', message: 'Read failed' }
+  const initialFailure = failLoad(beginLoad(initial), error)
+  assert.equal(initialFailure.status, 'error')
+  assert.equal(initialFailure.loaded_file.metadata, null)
+  assert.equal(initialFailure.observations.transcript_blocks.length, 0)
+
+  const loaded = applyParseResponse(initial, structuredClone(responseWithToolCall))
+  const pending = beginLoad(loaded)
+  const failed = failLoad(pending, error)
+  for (const state of [pending, failed]) {
+    assert.strictEqual(state.loaded_file, loaded.loaded_file)
+    assert.strictEqual(state.all_observations, loaded.all_observations)
+    assert.strictEqual(state.observations, loaded.observations)
+  }
+  assert.equal(pending.status, 'loading')
+  assert.equal(failed.status, 'error')
+  assert.strictEqual(failed.error, error)
+  const recovered = applyParseResponse(beginLoad(failed), structuredClone(responseWithToolCall))
+  assert.equal(recovered.status, 'loaded')
+  assert.equal(recovered.error, null)
+  const newSelection = selectPath(failed, 'another.jsonl')
+  assert.equal(newSelection.loaded_file.metadata, null)
+  assert.equal(newSelection.observations.transcript_blocks.length, 0)
 })
