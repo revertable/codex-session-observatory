@@ -113,6 +113,8 @@ struct EnvelopeFields<'a> {
 #[derive(Deserialize)]
 struct PayloadFields<'a> {
     #[serde(borrow)]
+    internal_chat_message_metadata_passthrough: Option<&'a RawValue>,
+    #[serde(borrow)]
     item: Option<&'a RawValue>,
     #[serde(rename = "type", borrow)]
     type_name: Option<&'a RawValue>,
@@ -522,6 +524,23 @@ fn typed_payload_timestamp(payload: &PayloadFields<'_>) -> Option<String> {
 
 fn typed_response_message<'a>(payload: &PayloadFields<'a>) -> Option<CandidateEntry<'a>> {
     let role = json_string(payload.role)?;
+    if role == "user" {
+        if let (Some(content), Some(metadata)) = (
+            payload.content,
+            payload.internal_chat_message_metadata_passthrough,
+        ) {
+            if let (Ok(content), Ok(metadata)) = (
+                serde_json::from_str::<Value>(content.get()),
+                serde_json::from_str::<Value>(metadata.get()),
+            ) {
+                if let Some(projected) = project_app_user_content(&content, &metadata) {
+                    return projected
+                        .and_then(|text| trimmed_nonempty(Cow::Owned(text)))
+                        .map(CandidateEntry::User);
+                }
+            }
+        }
+    }
     let content = trimmed_nonempty(typed_extract_text(payload)?)?;
     if role == "user" {
         return Some(CandidateEntry::User(content));
@@ -1210,8 +1229,47 @@ fn extract_session_meta(payload: &Value) -> Option<RenderedEntry> {
     }
 }
 
+// None means the metadata cannot prove a part mapping: retain the legacy path.
+// Some(None) means every text part was a recognized App-internal part.
+fn project_app_user_content(content: &Value, metadata: &Value) -> Option<Option<String>> {
+    let parts = content.as_array()?;
+    let kinds = metadata.get("content_item_kinds")?.as_array()?;
+    if parts.len() != kinds.len() || kinds.iter().any(|kind| !kind.is_string()) {
+        return None;
+    }
+    let is_internal = |part: &Value, kind: &Value| {
+        kind.as_str() == Some("additional_content.codex_apps_open_page")
+            && string_field(part, "type") == Some("input_text")
+            && string_field(part, "text").is_some()
+    };
+    if !parts
+        .iter()
+        .zip(kinds)
+        .any(|(part, kind)| is_internal(part, kind))
+    {
+        return None;
+    }
+    let retained: Vec<Value> = parts
+        .iter()
+        .zip(kinds)
+        .filter(|(part, kind)| !is_internal(part, kind))
+        .map(|(part, _)| part.clone())
+        .collect();
+    Some(text_from_value(&Value::Array(retained)))
+}
+
 fn extract_response_message(payload: &Value) -> Option<RenderedEntry> {
     let role = string_field(payload, "role")?;
+    if role == "user" {
+        if let (Some(content), Some(metadata)) = (
+            payload.get("content"),
+            payload.get("internal_chat_message_metadata_passthrough"),
+        ) {
+            if let Some(projected) = project_app_user_content(content, metadata) {
+                return projected.map(|text| classify_user_message(&text));
+            }
+        }
+    }
     let content = extract_text(payload)?.trim().to_owned();
     if content.is_empty() {
         return None;
@@ -1584,6 +1642,96 @@ mod tests {
             "codex-session-observatory-{name}-{}-{unique}.jsonl",
             std::process::id(),
         ))
+    }
+
+    #[test]
+    fn app_internal_parts_require_verified_metadata_and_preserve_human_parts() {
+        let markup =
+            r#"<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>"#;
+        let part = |text: &str| serde_json::json!({"type":"input_text","text":text});
+        let cases = [
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!([
+                    "additional_content.codex_apps_open_page"
+                ])),
+                None,
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!(["user.text"])),
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                None,
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!(["additional_content.unknown"])),
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!([])),
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!([
+                    "additional_content.codex_apps_open_page",
+                    "user.text"
+                ])),
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([part("Before"), part(markup), part("After")]),
+                Some(serde_json::json!([
+                    "user.text",
+                    "additional_content.codex_apps_open_page",
+                    "user.text"
+                ])),
+                Some("Before\nAfter".to_owned()),
+            ),
+            (
+                serde_json::json!([part(markup)]),
+                Some(serde_json::json!([null])),
+                Some(markup.to_owned()),
+            ),
+            (
+                serde_json::json!([{"type":"text","text":markup}]),
+                Some(serde_json::json!([
+                    "additional_content.codex_apps_open_page"
+                ])),
+                Some(markup.to_owned()),
+            ),
+        ];
+        for (content, kinds, expected) in cases {
+            let mut payload =
+                serde_json::json!({"type":"message", "role":"user", "content":content});
+            if let Some(kinds) = kinds {
+                payload["internal_chat_message_metadata_passthrough"] =
+                    serde_json::json!({"content_item_kinds":kinds});
+            }
+            payload["text"] = serde_json::json!("fallback must not expose an internal command");
+            let input = serde_json::json!({"type":"response_item", "payload":payload}).to_string();
+            let typed = parse_str(&input);
+            assert_eq!(typed, parse_legacy_for_differential_test(&input));
+            assert_eq!(
+                typed
+                    .entries
+                    .iter()
+                    .map(|entry| entry.content.clone())
+                    .collect::<Vec<_>>(),
+                expected.into_iter().collect::<Vec<_>>()
+            );
+            assert_eq!(
+                typed.observed_event_counts.get("response_item/message"),
+                Some(&1)
+            );
+            assert_eq!(typed.malformed_lines, 0);
+        }
     }
 
     #[test]

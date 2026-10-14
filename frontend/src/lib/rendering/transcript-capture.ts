@@ -5,6 +5,7 @@ import type {
   TranscriptBlockDto,
 } from '../parse-contract'
 import type { TranscriptThemeName } from './transcript-themes'
+import { captureMessageContent } from './message-plain-text.ts'
 import { formatEntryTimestamp } from './entry-timestamp.ts'
 
 export interface TranscriptCaptureInput {
@@ -58,7 +59,7 @@ function serializeTerminalTranscript(input: TranscriptCaptureInput): string {
         `${isCollapsed ? '[>]' : '[v]'} ${terminalDisplayLabel(block)}${timestamp === null ? '' : ` · ${timestamp}`}`,
       )
       if (!isCollapsed) {
-        lines.push(' ', block.content)
+        lines.push(' ', captureMessageContent(block))
       } else {
         lines.push(' ')
       }
@@ -71,7 +72,7 @@ function serializeTerminalTranscript(input: TranscriptCaptureInput): string {
   }
 
   lines.push(TERMINAL_SEPARATOR)
-  return lines.join('\n').trim()
+  return lines.join('\n')
 }
 
 function serializeMarkdownTranscript(input: TranscriptCaptureInput): string {
@@ -92,7 +93,7 @@ function serializeMarkdownTranscript(input: TranscriptCaptureInput): string {
     appendComponentBlocks(lines, input.blocks, input.collapsedBlocks)
   }
 
-  return lines.join('\n').trim()
+  return lines.join('\n')
 }
 
 function serializeChatTranscript(input: TranscriptCaptureInput): string {
@@ -113,7 +114,7 @@ function serializeChatTranscript(input: TranscriptCaptureInput): string {
     appendComponentBlocks(lines, input.blocks, input.collapsedBlocks)
   }
 
-  return lines.join('\n').trim()
+  return lines.join('\n')
 }
 
 function appendComponentBlocks(
@@ -129,7 +130,7 @@ function appendComponentBlocks(
       lines.push(timestamp)
     }
     if (!isCollapsed) {
-      lines.push(block.content)
+      lines.push(captureMessageContent(block))
     }
   })
 }

@@ -465,7 +465,7 @@
   opacity: 0.72;
 }
 
-.terminal-block-content {
+.terminal-block .technical-message-content {
   margin: 0;
   overflow: visible;
   color: #e6e6e6;
@@ -518,4 +518,64 @@
   .terminal-transcript {
     min-height: 480px;
   }
+}
+
+/* Message semantics are shared; typography belongs to the selected presentation. */
+.message-content { white-space: normal; overflow-wrap: anywhere; }
+.message-content .message-text,
+.message-content .message-inline-code { white-space: pre-wrap; }
+.message-content p { margin: 0 0 0.8em; }
+.message-content > :last-child { margin-bottom: 0; }
+.message-content ul,
+.message-content ol { margin: 0.65em 0; padding-inline-start: 1.7em; }
+.message-content li > p { margin-bottom: 0.4em; }
+.message-content strong { font-weight: 700; }
+.message-content em { font-style: italic; }
+.message-content .message-inline-code {
+  padding: 0.08em 0.3em; border-radius: 3px;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  font-family: var(--mono);
+}
+.message-content .message-code-block {
+  margin: 0.65em 0; padding: 0.8em;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 4px; background: color-mix(in srgb, currentColor 5%, transparent);
+  font-family: var(--mono); white-space: pre-wrap;
+}
+.message-content a { color: inherit; text-decoration: underline; cursor: pointer; }
+.message-content a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.terminal-block .message-content { font: 14px/1.5 var(--mono); }
+.terminal-block .message-inline-code { color: #ffc46b; }
+.message-link-error { font-size: 0.85em; }
+
+/* Keep fenced panels independent of the app-wide inline code decoration.
+   Light DM deliberately retains its established code appearance. */
+.terminal-transcript .message-content .message-code-block {
+  color: #b8cfd6;
+  background: #1b2327;
+  border-color: #334349;
+}
+
+.terminal-transcript .message-content .message-code-block > code,
+.markdown-transcript .message-content .message-code-block > code,
+.chat-transcript[data-chat-theme='dark'] .message-content .message-code-block > code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.markdown-transcript .message-content .message-code-block > code {
+  color: var(--accent);
+}
+
+.chat-transcript[data-chat-theme='dark'] .message-content .message-code-block {
+  color: #d8e5eb;
+  background: #20262d;
+  border-color: #414954;
+}
+
+.chat-transcript[data-chat-theme='dark'] .message-content .message-inline-code {
+  color: #e7f1f5;
+  background: #25343d;
 }

@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop permissions for the Observatory app shell.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
@@ -14,6 +16,12 @@
         },
         {
           "url": "https://github.com/revertable/codex-session-observatory/releases/latest"
+        },
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
         }
       ]
     }

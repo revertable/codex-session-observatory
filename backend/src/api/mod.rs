@@ -779,6 +779,24 @@ mod tests {
     }
 
     #[test]
+    fn markdown_source_remains_source_in_transport_dtos() {
+        for source in [
+            "first\nsecond",
+            "first  \nsecond",
+            "`code` &#x20;\nApply",
+            "<tag> &amp; >",
+            "**bold**\n\n- item",
+            "```\n  code &amp;  \n```",
+        ] {
+            let input = serde_json::json!({"type":"response_item", "payload":{"type":"message","role":"user","content":[{"type":"input_text","text":source}]}}).to_string();
+            let parsed = crate::parser::parse_str(&input);
+            let dto = ParsedChatLogDto::from_domain(&parsed, &ChatEntryFilter::default());
+            assert_eq!(dto.transcript_blocks[0].content.as_str(), source);
+            assert_eq!(dto.entries[0].content.as_str(), source);
+        }
+    }
+
+    #[test]
     fn parsed_chat_log_dto_preserves_domain_counts_and_visible_count() {
         let dto = ParsedChatLogDto::from_domain(
             &parsed_log(),

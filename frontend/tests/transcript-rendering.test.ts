@@ -461,3 +461,27 @@ function responseFixture(): ParseResponseDto {
     },
   }
 }
+
+
+test('all captures share message semantics while preserving technical payloads and state', () => {
+  const raw = '`CONFIG=9000` &#x20;\nApply\n\n**important**\n\n- A\n- B'
+  const code = '```\n  code &amp;  \n```'
+  const technical = '  **raw** &#x20;\n  output  \n'
+  const inputBlocks: TranscriptBlockDto[] = [
+    { entry_type: 'you', label: '[YOU]', title: '[YOU]', timestamp: null, content: raw },
+    { entry_type: 'codex', label: '[CODEX]', title: '[CODEX]', timestamp: null, content: code },
+    { entry_type: 'tool_result', label: '[TOOL RESULT]', title: '[TOOL RESULT]', timestamp: null, content: technical },
+  ]
+  const before = JSON.stringify(inputBlocks)
+  for (const theme of ['Terminal Style', 'Markdown Style', 'DM Style', 'DM Style (Dark)'] as const) {
+    const captured = serializeTranscript({ theme, blocks: inputBlocks, references: [], observedEventCounts: [], collapsedBlocks: {} })
+    assert.ok(captured.includes('CONFIG=9000  \nApply\n\nimportant\n\n- A\n- B'))
+    assert.ok(captured.includes('  code &amp;  \n'))
+    assert.ok(captured.includes(technical))
+    const collapsed = serializeTranscript({ theme, blocks: inputBlocks, references: [], observedEventCounts: [], collapsedBlocks: { 0: true, 1: true } })
+    assert.ok(!collapsed.includes('CONFIG=9000'))
+    assert.ok(!collapsed.includes('  code &amp;'))
+    assert.ok(collapsed.includes(technical))
+  }
+  assert.equal(JSON.stringify(inputBlocks), before)
+})

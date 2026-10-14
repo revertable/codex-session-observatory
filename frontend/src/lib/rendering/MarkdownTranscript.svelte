@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { openUrl } from '@tauri-apps/plugin-opener'
+  import { openExternalLink } from './external-links.ts'
+  import MessageContent from './MessageContent.svelte'
   import type { ObservedEventCountDto, ReferencedConversationDto, TranscriptBlockDto } from '../parse-contract'
   import type { PublicReleaseStatus } from '../update-check'
   import { formatEntryTimestamp } from './entry-timestamp.ts'
@@ -39,7 +40,7 @@
 
   async function visitCosmicHorizon(event: MouseEvent) {
     event.preventDefault()
-    await openUrl(COSMIC_HORIZON_URL)
+    await openExternalLink(COSMIC_HORIZON_URL)
   }
 </script>
 
@@ -106,7 +107,7 @@
               {/if}
             </button>
             {#if !isCollapsed}
-              <pre>{block.content}</pre>
+              <MessageContent {block} />
             {/if}
           </section>
         {/each}
