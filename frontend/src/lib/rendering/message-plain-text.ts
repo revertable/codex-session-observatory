@@ -46,6 +46,10 @@ function nodeText(node: MessageNode): string {
       const label = inlineText(node.children ?? [])
       return node.href === null || node.href === undefined || label === node.href ? label : label + ' (' + node.href + ')'
     }
+    case 'table': return (node.children ?? []).map(nodeText).join('\n')
+    case 'table_head': case 'table_body': return (node.children ?? []).map(nodeText).join('\n')
+    case 'table_row': return (node.children ?? []).map(nodeText).join('\t')
+    case 'table_header_cell': case 'table_cell': return inlineText(node.children ?? [])
     case 'list_item': return blockText(node.children ?? [])
     case 'unordered_list': case 'ordered_list':
       return (node.children ?? []).map((item, index) => {

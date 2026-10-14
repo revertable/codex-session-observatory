@@ -136,6 +136,7 @@
 }
 
 .markdown-block {
+  min-width: 0;
   border-left: 4px solid #8a7d68;
   padding: 2px 0 2px 16px;
 }
@@ -259,6 +260,7 @@
 }
 
 .chat-block {
+  min-width: 0;
   width: min(72%, 680px);
   border: 1px solid #d4d9e0;
   border-radius: 16px 16px 16px 4px;
@@ -578,4 +580,52 @@
 .chat-transcript[data-chat-theme='dark'] .message-content .message-inline-code {
   color: #e7f1f5;
   background: #25343d;
+}
+
+/* Tables share semantics while their colors follow the surrounding theme. */
+.message-content .message-table-scroll {
+  max-width: 100%;
+  min-width: 0;
+  margin: 0.8em 0;
+  overflow-x: auto;
+  white-space: normal;
+}
+.message-content .message-table-scroll:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.message-content .message-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  color: inherit;
+}
+.message-content .message-table th,
+.message-content .message-table td {
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  padding: 0.55em 0.75em;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.message-content .message-table th {
+  font-weight: 700;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+.message-content .message-table [data-align='left'] { text-align: left; }
+.message-content .message-table [data-align='center'] { text-align: center; }
+.message-content .message-table [data-align='right'] { text-align: right; }
+.terminal-transcript .message-table { font: inherit; }
+.terminal-transcript .message-table th {
+  color: #b8cfd6;
+  background: #20282c;
+}
+.terminal-transcript .message-table th,
+.terminal-transcript .message-table td { border-color: #334349; }
+.markdown-transcript .message-table th { background: #e8e4dc; }
+.markdown-transcript .message-table th,
+.markdown-transcript .message-table td { border-color: #c9c3b7; }
+.chat-transcript[data-chat-theme='dark'] .message-table th {
+  background: rgba(0, 0, 0, 0.16);
 }

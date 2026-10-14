@@ -485,3 +485,21 @@ test('all captures share message semantics while preserving technical payloads a
   }
   assert.equal(JSON.stringify(inputBlocks), before)
 })
+
+
+test('table capture shares readable rows and inline meaning across all themes', () => {
+  const source = '| 대상 | 변경 |\n|---|---|\n| Terminal fenced | panel `#1b2327` |\n| Markdown fenced | **code** |\n| DM Style | *유지* |\n| DM Dark fenced | [docs](https://example.com/docs) |\n| DM Dark inline | `trim()` |'
+  const tableBlock: TranscriptBlockDto = { entry_type: 'codex', label: '[CODEX]', title: '[CODEX]', timestamp: '2026-10-14T01:00:00Z', content: source }
+  const expected = '대상\t변경\nTerminal fenced\tpanel #1b2327\nMarkdown fenced\tcode\nDM Style\t유지\nDM Dark fenced\tdocs (https://example.com/docs)\nDM Dark inline\ttrim()'
+  for (const theme of ['Terminal Style', 'Markdown Style', 'DM Style', 'DM Style (Dark)'] as const) {
+    const input = { theme, blocks: [tableBlock], references, observedEventCounts, collapsedBlocks: {} }
+    const captured = serializeTranscript(input)
+    assert.ok(captured.includes(expected))
+    assert.ok(captured.includes('Reference title'))
+    assert.ok(captured.includes(formatEntryTimestamp(tableBlock.timestamp)!.label))
+    assert.ok(!captured.includes('|---|'))
+    assert.ok(!captured.includes('**code**'))
+    assert.ok(!serializeTranscript({ ...input, collapsedBlocks: { 0: true } }).includes('panel #1b2327'))
+    assert.equal(tableBlock.content, source)
+  }
+})

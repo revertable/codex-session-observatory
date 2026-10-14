@@ -42,6 +42,21 @@
       <ol start={node.start ?? 1}>{@render nodes(node.children ?? [])}</ol>
     {:else if node.type === 'list_item'}
       <li>{@render nodes(node.children ?? [])}</li>
+    {:else if node.type === 'table'}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex (The overflow region must support keyboard scrolling.) -->
+      <div class="message-table-scroll" tabindex="0" role="region" aria-label="Message table">
+        <table class="message-table">{@render nodes(node.children ?? [])}</table>
+      </div>
+    {:else if node.type === 'table_head'}
+      <thead>{@render nodes(node.children ?? [])}</thead>
+    {:else if node.type === 'table_body'}
+      <tbody>{@render nodes(node.children ?? [])}</tbody>
+    {:else if node.type === 'table_row'}
+      <tr>{@render nodes(node.children ?? [])}</tr>
+    {:else if node.type === 'table_header_cell'}
+      <th scope="col" data-align={node.alignment ?? 'left'}>{@render nodes(node.children ?? [])}</th>
+    {:else if node.type === 'table_cell'}
+      <td data-align={node.alignment ?? 'left'}>{@render nodes(node.children ?? [])}</td>
     {:else if node.type === 'link'}
       {#if node.href != null}
         <a href={node.href} onclick={(event) => followLink(event, node.href!)}>{@render nodes(node.children ?? [])}</a>

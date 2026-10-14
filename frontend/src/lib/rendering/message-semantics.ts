@@ -7,6 +7,8 @@ export type MessageNodeType =
   | 'text' | 'strong' | 'emphasis' | 'code_inline' | 'code_block'
   | 'paragraph' | 'soft_break' | 'hard_break' | 'unordered_list'
   | 'ordered_list' | 'list_item' | 'link'
+  | 'table' | 'table_head' | 'table_body' | 'table_row'
+  | 'table_header_cell' | 'table_cell'
 
 export interface MessageNode {
   type: MessageNodeType
@@ -16,6 +18,7 @@ export interface MessageNode {
   start?: number
   tight?: boolean
   lines?: [number, number]
+  alignment?: 'left' | 'center' | 'right'
 }
 
 export interface MessageSemantics {
@@ -23,7 +26,7 @@ export interface MessageSemantics {
 }
 
 const parser = new MarkdownIt({ html: false, linkify: false, typographer: false })
-parser.disable(['image', 'table', 'heading', 'lheading', 'blockquote', 'hr', 'strikethrough'])
+parser.disable(['image', 'heading', 'lheading', 'blockquote', 'hr', 'strikethrough'])
 const cache = new WeakMap<TranscriptBlockDto, { content: string; kind: string; value: MessageSemantics }>()
 
 export function isMarkdownMessage(block: TranscriptBlockDto): boolean {
@@ -61,6 +64,8 @@ function convertTokens(tokens: Token[]): MessageNode[] {
       list_item_open: 'list_item', link_open: 'link', text: 'text', text_special: 'text',
       code_inline: 'code_inline', code_block: 'code_block', fence: 'code_block',
       softbreak: 'soft_break', hardbreak: 'hard_break',
+      table_open: 'table', thead_open: 'table_head', tbody_open: 'table_body',
+      tr_open: 'table_row', th_open: 'table_header_cell', td_open: 'table_cell',
     }
     const type = types[token.type]
     if (type === undefined) {
@@ -73,6 +78,12 @@ function convertTokens(tokens: Token[]): MessageNode[] {
     else if (type === 'text' || type === 'code_inline' || type === 'code_block') node.text = token.content
     if (type === 'paragraph') node.tight = token.hidden
     if (type === 'ordered_list') node.start = Number(token.attrGet('start') ?? 1)
+    if (type === 'table_header_cell' || type === 'table_cell') {
+      // Interpret only the parser's known alignment values, never arbitrary CSS.
+      const alignment = { 'text-align:left': 'left', 'text-align:center': 'center', 'text-align:right': 'right' } as const
+      const style = String(token.attrGet('style') ?? '')
+      if (Object.hasOwn(alignment, style)) node.alignment = alignment[style as keyof typeof alignment]
+    }
     if (type === 'link') node.href = validatedExternalUrl(String(token.attrGet('href') ?? ''))
     stack[stack.length - 1].push(node)
     if (node.children !== undefined) stack.push(node.children)
