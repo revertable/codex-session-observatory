@@ -2956,6 +2956,114 @@ mod tests {
         assert_eq!(parsed, parse_legacy_for_differential_test(&input));
     }
 
+    fn question_reply_text(replies: Value) -> String {
+        format!(
+            "<send_user_message_question_reply>\n{replies}\n</send_user_message_question_reply>\n"
+        )
+    }
+
+    #[test]
+    fn question_reply_transport_preserves_you_timestamp_without_duplicate_event() {
+        let reply = question_reply_text(serde_json::json!([{
+            "questionItemId": "[\"request_user_input_async\",\"call-example\",0]",
+            "question": "Sanitized question?",
+            "answer": "잠시 기다려 시간이 좀 걸린다."
+        }]));
+        let response = serde_json::json!({
+            "timestamp": "2026-10-15T00:28:44.002Z",
+            "type": "response_item", "payload": {
+                "type": "message", "id": "reply-response", "role": "user",
+                "content": [{"type":"input_text", "text":reply}]
+            }
+        });
+        let completed = serde_json::json!({
+            "timestamp": "2026-10-15T00:28:44.014Z",
+            "type": "event_msg", "payload": {
+                "type":"item_completed", "item": {
+                    "type":"UserMessage", "id":"reply-event",
+                    "content":[{"type":"text", "text":reply, "text_elements":[]}]
+                }
+            }
+        });
+        let input = format!("{response}\n{completed}");
+        let parsed = parse_str(&input);
+        assert_eq!(
+            parsed.entries,
+            vec![RenderedEntry {
+                kind: RenderedEntryKind::You,
+                content: "잠시 기다려 시간이 좀 걸린다.".to_owned(),
+            }]
+        );
+        assert_eq!(
+            parsed.entry_timestamps,
+            vec![Some("2026-10-15T00:28:44.002Z".to_owned())]
+        );
+        assert_eq!(parsed.ignored_lines, 1);
+        assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+    }
+
+    #[test]
+    fn question_replies_keep_array_order_without_pairing_or_reordering_questions() {
+        let reply = question_reply_text(serde_json::json!([
+            {"questionItemId":"[\"request_user_input_async\",\"call-question\",1]", "question":"Second?", "answer":"second answer"},
+            {"questionItemId":"[\"request_user_input_async\",\"call-question\",0]", "question":"First?", "answer":"first answer"}
+        ]));
+        let response = response_user_message_line(&reply);
+        let question = question_line(
+            "call-question",
+            serde_json::json!([
+                {"title":"First?"}, {"title":"Second?"}
+            ]),
+        );
+        // A reply also stands alone, including when its question has not appeared yet.
+        for input in [response.clone(), format!("{response}\n{question}")] {
+            let parsed = parse_str(&input);
+            assert_eq!(parsed.entries[0].kind, RenderedEntryKind::You);
+            assert_eq!(parsed.entries[0].content, "second answer\n\nfirst answer");
+            if parsed.entries.len() > 1 {
+                assert_eq!(parsed.entries[1].kind, RenderedEntryKind::Codex);
+                assert_eq!(parsed.entries[1].content, "First?\n\nSecond?");
+            }
+            assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+        }
+        let parsed = parse_str(&format!("{question}\n{response}"));
+        assert_eq!(parsed.entries.len(), 2);
+        assert_eq!(parsed.entries[0].kind, RenderedEntryKind::Codex);
+        assert_eq!(parsed.entries[1].kind, RenderedEntryKind::You);
+        assert_eq!(parsed.entries[1].content, "second answer\n\nfirst answer");
+    }
+
+    #[test]
+    fn unrecognized_question_reply_transport_preserves_original_user_text() {
+        let valid = question_reply_text(serde_json::json!([
+            {"questionItemId":"q", "question":"Q?", "answer":"yes"}
+        ]));
+        for text in [
+            "<send_user_message_question_reply>\n{bad}\n</send_user_message_question_reply>"
+                .to_owned(),
+            question_reply_text(serde_json::json!([])),
+            question_reply_text(serde_json::json!([{"questionItemId":"q", "question":"Q?"}])),
+            question_reply_text(
+                serde_json::json!([{"questionItemId":"q", "question":"Q?", "answer":" "}]),
+            ),
+            valid.replace("</send_user_message_question_reply>", ""),
+            valid.replace("<send_user_message_question_reply>", ""),
+            format!("Normal text\n{valid}"),
+            format!("{valid}\nNormal text"),
+        ] {
+            for input in [
+                response_user_message_line(&text),
+                event_user_message_line(&text),
+            ] {
+                let parsed = parse_str(&input);
+                assert_eq!(parsed.entries.len(), 1);
+                assert_eq!(parsed.entries[0].kind, RenderedEntryKind::You);
+                assert_eq!(parsed.entries[0].content, text.trim());
+                assert_eq!(parsed, parse_legacy_for_differential_test(&input));
+            }
+        }
+    }
+
     #[test]
     fn questions_do_not_merge_by_text_timestamp_or_turn() {
         let first = question_line("first", serde_json::json!([{"title":"same"}]));
