@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod locator;
+pub mod navigator;
 pub mod source;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

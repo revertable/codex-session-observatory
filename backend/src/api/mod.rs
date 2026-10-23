@@ -4,6 +4,8 @@ use std::{
     sync::Arc,
 };
 
+pub mod navigator;
+
 use serde::Serialize;
 use serde_json::Value;
 

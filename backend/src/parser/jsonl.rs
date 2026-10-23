@@ -186,6 +186,137 @@ pub fn parse_reader<R: Read>(reader: R) -> io::Result<ParsedChatLog> {
     parse_bufread(BufReader::new(reader))
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ConversationActivity {
+    pub metadata_created_at_ms: Option<i64>,
+    pub envelope_created_at_ms: Option<i64>,
+    pub last_conversation_at_ms: Option<i64>,
+}
+
+pub(crate) fn timestamp_millis(text: &str) -> Option<i64> {
+    time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .and_then(|value| i64::try_from(value.unix_timestamp_nanos() / 1_000_000).ok())
+}
+
+/// Only one line and its temporary message candidates are retained. Reuse the
+/// transcript's extraction and human/transport classification, without building
+/// a ParsedChatLog, tool payloads, provenance cache, or rendered transcript.
+pub fn scan_conversation_activity<R: Read>(reader: R) -> io::Result<ConversationActivity> {
+    let mut reader = BufReader::new(reader);
+    let mut buffer = Vec::new();
+    let mut activity = ConversationActivity::default();
+    let mut observed_meta = false;
+    // Keep only identity/selection metadata for stable message slots. A replay
+    // of an existing item must not turn restoration time into conversation time.
+    let mut stable_times: std::collections::HashMap<String, (u8, usize, Option<i64>)> =
+        std::collections::HashMap::new();
+    loop {
+        buffer.clear();
+        if reader.read_until(b'\n', &mut buffer)? == 0 {
+            break;
+        }
+        let decoded = String::from_utf8_lossy(&buffer);
+        let line = decoded.trim();
+        let Ok(envelope) = serde_json::from_str::<EnvelopeFields<'_>>(line) else {
+            continue;
+        };
+        let top = json_string(envelope.type_name);
+        let payload = envelope
+            .payload
+            .and_then(|raw| serde_json::from_str::<PayloadFields<'_>>(raw.get()).ok());
+        let kind = payload
+            .as_ref()
+            .and_then(|value| json_string(value.type_name));
+        if top.as_deref() == Some("session_meta") {
+            if !observed_meta {
+                observed_meta = true;
+                activity.metadata_created_at_ms = payload
+                    .as_ref()
+                    .and_then(typed_payload_timestamp)
+                    .as_deref()
+                    .and_then(timestamp_millis);
+                activity.envelope_created_at_ms = typed_timestamp(&envelope)
+                    .as_deref()
+                    .and_then(timestamp_millis);
+            }
+            continue;
+        }
+        match (top.as_deref(), kind.as_deref()) {
+            (Some("response_item"), Some("message"))
+            | (Some("event_msg"), Some("user_message" | "agent_message" | "item_completed")) => {}
+            (
+                Some(
+                    "response_item" | "event_msg" | "world_state" | "turn_context"
+                    | "token_usage_record" | "compacted",
+                ),
+                _,
+            ) => continue,
+            _ => {}
+        }
+        let seeds = match extract_typed_focused_seed(
+            line,
+            &envelope,
+            payload.as_ref(),
+            top.as_deref(),
+            kind.as_deref(),
+        ) {
+            Some(seed) => seed.into_iter().collect(),
+            None => serde_json::from_str::<Value>(line)
+                .ok()
+                .map(|value| extract_candidate_seeds(&value))
+                .unwrap_or_default(),
+        };
+        for seed in seeds {
+            let (candidate, stable_key, _) = parsed_candidate(seed);
+            if let Some(candidate) = candidate {
+                if matches!(
+                    candidate.entry.kind,
+                    RenderedEntryKind::You | RenderedEntryKind::Codex
+                ) {
+                    let timestamp = candidate.timestamp.as_deref().and_then(timestamp_millis);
+                    if let Some(key) = stable_key {
+                        let proposed = (
+                            candidate.source.priority(),
+                            candidate.entry.content.len(),
+                            timestamp,
+                        );
+                        match stable_times.entry(key) {
+                            std::collections::hash_map::Entry::Vacant(entry) => {
+                                entry.insert(proposed);
+                            }
+                            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                                let current = entry.get();
+                                if should_replace_metadata(
+                                    current.0, current.1, proposed.0, proposed.1,
+                                ) {
+                                    entry.insert(proposed);
+                                }
+                            }
+                        }
+                    } else if let Some(timestamp) = timestamp {
+                        activity.last_conversation_at_ms = Some(
+                            activity
+                                .last_conversation_at_ms
+                                .map_or(timestamp, |old| old.max(timestamp)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    activity.last_conversation_at_ms = activity
+        .last_conversation_at_ms
+        .into_iter()
+        .chain(
+            stable_times
+                .values()
+                .filter_map(|(_, _, timestamp)| *timestamp),
+        )
+        .max();
+    Ok(activity)
+}
+
 pub fn parse_file(path: impl AsRef<Path>) -> io::Result<ParsedChatLog> {
     let path = path.as_ref();
     if !path.is_file() {
@@ -1056,12 +1187,22 @@ fn is_known_duplicate_source_pair(left: CandidateSource, right: CandidateSource)
 }
 
 fn should_replace_candidate(current: &ParsedCandidate, candidate: &ParsedCandidate) -> bool {
-    let current_priority = current.source.priority();
-    let candidate_priority = candidate.source.priority();
+    should_replace_metadata(
+        current.source.priority(),
+        current.entry.content.len(),
+        candidate.source.priority(),
+        candidate.entry.content.len(),
+    )
+}
 
+fn should_replace_metadata(
+    current_priority: u8,
+    current_length: usize,
+    candidate_priority: u8,
+    candidate_length: usize,
+) -> bool {
     candidate_priority > current_priority
-        || (candidate_priority == current_priority
-            && candidate.entry.content.len() > current.entry.content.len())
+        || (candidate_priority == current_priority && candidate_length > current_length)
 }
 
 fn focused_stable_id(payload_type: Option<&str>, payload: &Value) -> Option<String> {

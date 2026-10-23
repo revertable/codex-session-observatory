@@ -1,8 +1,59 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use backend::api::{self, LocateParentSessionRequestDto, ParseBoundaryRequest};
 use backend::export::{self, ExportWorklogError, ExportWorklogRequest, ExportWorklogResult};
+use backend::{
+    api::navigator::*,
+    session::navigator::{self, NavigatorService},
+};
 use serde::{Deserialize, Serialize};
+
+#[derive(Default)]
+struct NavigatorState(Arc<NavigatorService>);
+
+fn navigator_task_error(error: impl std::fmt::Display) -> api::ErrorResponseDto {
+    api::ErrorResponseDto::new("navigator_task_failed", error.to_string())
+}
+
+#[tauri::command]
+async fn reload_session_navigator(
+    state: tauri::State<'_, NavigatorState>,
+) -> api::ApiResult<SessionPageDto> {
+    let service = Arc::clone(&state.inner().0);
+    let generation = service.begin_reload();
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = navigator::codex_home().map_err(navigator_task_error)?;
+        let snapshot = navigator::collect_snapshot(&home).map_err(navigator_task_error)?;
+        service.install(generation, snapshot)
+    })
+    .await
+    .map_err(navigator_task_error)?
+}
+
+#[tauri::command]
+async fn list_sessions_flat(
+    state: tauri::State<'_, NavigatorState>,
+    request: FlatSessionsRequestDto,
+) -> api::ApiResult<SessionPageDto> {
+    let service = Arc::clone(&state.inner().0);
+    tauri::async_runtime::spawn_blocking(move || service.flat(request))
+        .await
+        .map_err(navigator_task_error)?
+}
+
+#[tauri::command]
+async fn list_sessions_hierarchy(
+    state: tauri::State<'_, NavigatorState>,
+    request: HierarchicalSessionsRequestDto,
+) -> api::ApiResult<SessionHierarchyDto> {
+    let service = Arc::clone(&state.inner().0);
+    tauri::async_runtime::spawn_blocking(move || service.hierarchy(request))
+        .await
+        .map_err(navigator_task_error)?
+}
 
 #[derive(Clone, Debug, Deserialize)]
 struct TauriFilterDto {
@@ -157,9 +208,13 @@ fn resolve_jsonl_initial_directory(remembered_directory: Option<String>) -> Stri
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(NavigatorState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            reload_session_navigator,
+            list_sessions_flat,
+            list_sessions_hierarchy,
             export_worklog,
             locate_parent_session,
             parse_selected_jsonl,
@@ -172,6 +227,66 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn navigator_transport_contract_shares_snapshot_and_serializes_sources() {
+        let service = NavigatorService::default();
+        let first = service
+            .install(
+                service.begin_reload(),
+                navigator::NavigatorSnapshot {
+                    sessions_root: "synthetic/sessions".into(),
+                    diagnostics: NavigatorDiagnosticsDto::default(),
+                    items: vec![SessionSummaryDto {
+                        entry_key: "thread:synthetic".into(),
+                        thread_id: Some("synthetic".into()),
+                        path: "synthetic/sessions/2026/10/20/sample.jsonl.zst".into(),
+                        title: "Synthetic session".into(),
+                        title_source: TitleSource::DatabaseName,
+                        created_at_ms: Some(1_792_454_400_000),
+                        created_at_source: TimeSource::DatabaseCreatedAtMs,
+                        last_conversation_at_ms: None,
+                        last_conversation_at_source: TimeSource::Unavailable,
+                        storage_date: Some("2026-10-20".into()),
+                        classification: api::SessionClassificationDto::Unclassified,
+                        thread_source: Some("user".into()),
+                    }],
+                },
+            )
+            .unwrap();
+        let request: FlatSessionsRequestDto = serde_json::from_value(
+            serde_json::json!({"snapshot_id":first.snapshot_id,"cursor":null}),
+        )
+        .unwrap();
+        let json = serde_json::to_value(service.flat(request).unwrap()).unwrap();
+        assert_eq!(json["items"][0]["title_source"], "database_name");
+        assert_eq!(
+            json["items"][0]["created_at_source"],
+            "database_created_at_ms"
+        );
+        assert!(json["items"][0]["last_conversation_at_ms"].is_null());
+        assert!(json["items"][0].get("content").is_none());
+        assert_eq!(json["has_more"], false);
+        assert!(json["next_cursor"].is_null());
+        let request: HierarchicalSessionsRequestDto =
+            serde_json::from_value(serde_json::json!({"snapshot_id":first.snapshot_id})).unwrap();
+        let hierarchy = serde_json::to_value(service.hierarchy(request).unwrap()).unwrap();
+        assert_eq!(hierarchy["snapshot_id"], json["snapshot_id"]);
+        assert_eq!(
+            hierarchy["years"][0]["months"][0]["days"][0]["items"][0],
+            json["items"][0]
+        );
+        let error = service
+            .flat(FlatSessionsRequestDto {
+                snapshot_id: "expired".into(),
+                cursor: None,
+            })
+            .unwrap_err();
+        assert_eq!(
+            error.to_json()["error"]["code"],
+            "navigator_snapshot_expired"
+        );
+    }
 
     fn export_result(refreshed: bool) -> ExportWorklogResult {
         ExportWorklogResult {
