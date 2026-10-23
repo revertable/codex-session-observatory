@@ -22,6 +22,9 @@
   import SpecializedSessionPanel from './lib/control-room/SpecializedSessionPanel.svelte'
   import TranscriptActions from './lib/control-room/TranscriptActions.svelte'
   import AppLayout from './lib/control-room/AppLayout.svelte'
+  import SessionNavigator from './lib/session-navigator/SessionNavigator.svelte'
+  import type { SessionSummary } from './lib/session-navigator/contract'
+  import { sessionPathKey } from './lib/session-navigator/state'
   import TranscriptViewer from './lib/rendering/TranscriptViewer.svelte'
   import CollectionPanel from './lib/collection/CollectionPanel.svelte'
   import {
@@ -48,6 +51,7 @@
   let collapsedBlocks: Record<number, boolean> = {}
   let publicReleaseStatus: PublicReleaseStatus | null = null
   let collection = createCollectionState()
+  let loadGeneration = 0
   $: messageIds = identifyMessages(
     workflow.selected_file.path,
     workflow.all_observations.transcript_blocks,
@@ -67,8 +71,16 @@
   }
 
   function selectJsonl(path: string) {
+    loadGeneration++
     collection = collectionForSelectedPath(collection, workflow.selected_file.path, path)
     replaceWorkflow(selectPath(workflow, path))
+  }
+
+  async function selectNavigatorSession(item: SessionSummary) {
+    if (workflow.status === 'loading' || isExportingWorklog || isLocatingParentSession) return
+    if (sessionPathKey(workflow.selected_file.path) !== sessionPathKey(item.path)) selectJsonl(item.path)
+    actionStatusMessage = ''
+    await loadSelectedJsonl(item.path)
   }
 
   onMount(() => {
@@ -142,15 +154,19 @@
       return
     }
 
+    const generation = ++loadGeneration
+
     replaceWorkflow(beginLoad(workflow))
     transcriptActionStatusMessage = ''
     parentSessionStatusMessage = ''
 
     try {
       const response = await loadAllObservations(path, parseSelectedJsonl)
+      if (generation !== loadGeneration) return
       replaceWorkflow(applyParseResponse(workflow, response))
       actionStatusMessage = ''
     } catch (error) {
+      if (generation !== loadGeneration) return
       replaceWorkflow(failLoad(workflow, normalizeLoadError(error)))
       actionStatusMessage = ''
     }
@@ -173,6 +189,7 @@
       return
     }
 
+    loadGeneration++
     replaceWorkflow(createInitialLoadWorkflowState())
     collection = createCollectionState()
     actionStatusMessage = ''
@@ -412,6 +429,13 @@
   />
 
   <AppLayout collectionOpen={collection.isOpen}>
+  {#snippet navigator()}
+    <SessionNavigator selectedPath={workflow.selected_file.path}
+      selectedThreadId={workflow.loaded_file.session?.identity?.thread_id ?? null}
+      theme={selectedTheme}
+      selecting={workflow.status === 'loading' || isExportingWorklog || isLocatingParentSession}
+      onSelect={selectNavigatorSession} />
+  {/snippet}
   {#snippet transcript()}
   <section class="terminal-section" aria-label="Transcript view">
     <article

@@ -52,7 +52,7 @@
 <div class="markdown-transcript" aria-label="Markdown transcript">
   <header class="markdown-document-header">
     <p class="markdown-kicker">Markdown Style</p>
-    <h2>Codex Session Observatory</h2>
+    <h2>Session Observatory</h2>
     {#if !isLoaded}
       <div class="markdown-empty-state">
         <p>Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.</p>

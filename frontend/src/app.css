@@ -477,6 +477,74 @@ code {
   display: none;
 }
 
+.observatory-workspace.has-navigator {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.observatory-workspace.has-navigator.collection-open {
+  grid-template-columns: 260px minmax(0, 1fr) minmax(240px, 28%);
+}
+
+.workspace-navigator {
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+  margin-top: 12px;
+}
+
+.session-navigator {
+  --navigator-bg: var(--panel);
+  --navigator-text: var(--text);
+  --navigator-muted: var(--muted);
+  --navigator-border: var(--border);
+  --navigator-active: var(--accent-weak);
+  border: 1px solid var(--navigator-border);
+  border-radius: 6px;
+  color: var(--navigator-text);
+  background: var(--navigator-bg);
+  font-size: 13px;
+}
+
+.session-navigator[data-theme='Terminal Style'],
+.session-navigator[data-theme='DM Style (Dark)'] {
+  --navigator-bg: #1b1d23;
+  --navigator-text: #e6e6e6;
+  --navigator-muted: #a6adba;
+  --navigator-border: #3d4350;
+  --navigator-active: #263b48;
+}
+
+.navigator-header { padding: 12px; }
+.navigator-heading, .navigator-mode { display: flex; align-items: center; gap: 6px; }
+.navigator-heading { justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.navigator-mode .status { min-width: 0; }
+.navigator-mode .toolbar-icon-button { width: 28px; height: 28px; padding: 3px; }
+.navigator-count { margin-top: 8px; color: var(--navigator-muted); font-size: 12px; }
+.navigator-messages { padding: 0 12px; overflow-wrap: anywhere; }
+.navigator-messages p, .navigator-diagnostics { margin-bottom: 8px; }
+.navigator-messages [role='alert'] { color: var(--danger); }
+.navigator-list { height: min(62svh, 620px); min-height: 220px; overflow: auto; overscroll-behavior: contain; padding: 4px 8px; }
+.session-entry-row { position: relative; border: 1px solid transparent; border-radius: 6px; padding: 8px; margin: 2px 0; }
+.session-entry-row:hover:not(.selecting), .session-entry-row.active { background: var(--navigator-active); border-color: var(--accent); }
+.session-title-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.session-entry { display: block; min-width: 0; max-width: 100%; text-align: left; border: 0; border-radius: 0; padding: 0; color: inherit; background: transparent; }
+/* Keep the row clickable while the independent Info button sits above it. */
+.session-entry::after { content: ''; position: absolute; inset: 0; border-radius: 6px; }
+.session-entry:disabled { background: transparent; color: var(--navigator-muted); }
+.session-entry:focus-visible { outline: none; }
+.session-entry:focus-visible::after, .session-info-button:focus-visible, .navigator-list:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.session-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-date { display: block; margin-top: 3px; font-size: 11px; color: var(--navigator-muted); pointer-events: none; }
+.session-title-info { position: relative; flex: none; display: inline-flex; }
+.session-info-button { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 2px; border: 0; color: var(--navigator-muted); background: transparent; }
+.session-info-button:hover { color: var(--navigator-text); background: var(--navigator-active); }
+.session-info-tooltip { position: fixed; z-index: 100; visibility: hidden; width: max-content; max-width: min(260px, calc(100vw - 16px)); padding: 6px 8px; border: 1px solid var(--navigator-border); border-radius: 4px; color: var(--navigator-text); background: var(--navigator-bg); box-shadow: var(--shadow); font: 12px/1.5 var(--sans); overflow-wrap: anywhere; }
+.session-info-tooltip.visible { visibility: visible; }
+.navigator-list details { padding-left: 10px; }
+.navigator-list > details { padding-left: 0; }
+.navigator-list summary { cursor: pointer; padding: 5px 2px; }
+.navigator-empty { padding: 12px 4px; color: var(--navigator-muted); }
+
 .collection-panel {
   --collection-bg: var(--panel);
   --collection-text: var(--text);

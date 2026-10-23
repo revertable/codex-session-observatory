@@ -4,6 +4,18 @@ import { open } from '@tauri-apps/plugin-dialog'
 import type { ApiErrorDto, ErrorResponseDto, FilterDto, ParseResponseDto } from './parse-contract'
 import type { LocateParentSessionResponse } from './parent-session-contract'
 import type { ExportWorklogResponse } from './worklog-contract'
+import type { NavigatorApi, SessionPage, SessionHierarchy } from './session-navigator/contract'
+
+async function navigatorInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try { return await invoke<T>(command, args) }
+  catch (error) { throw normalizeApiError(error) }
+}
+
+export const sessionNavigatorApi: NavigatorApi = {
+  reload: () => navigatorInvoke<SessionPage>('reload_session_navigator'),
+  flat: (snapshot_id, cursor) => navigatorInvoke<SessionPage>('list_sessions_flat', { request: { snapshot_id, cursor } }),
+  hierarchy: (snapshot_id) => navigatorInvoke<SessionHierarchy>('list_sessions_hierarchy', { request: { snapshot_id } }),
+}
 
 let lastSelectedDirectory: string | null = null
 let lastWorklogParentDirectory: string | null = null

@@ -56,7 +56,7 @@
 >
   <header class="chat-transcript-header">
     <div>
-      <strong>Codex Session Observatory</strong>
+      <strong>Session Observatory</strong>
       <span>{theme}</span>
     </div>
     {#if !isLoaded}

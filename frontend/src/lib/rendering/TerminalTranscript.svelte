@@ -63,7 +63,7 @@
 </script>
 
 <div class="terminal-transcript" aria-label="Terminal transcript">
-  <div class="terminal-title">Codex Session Observatory</div>
+  <div class="terminal-title">Session Observatory</div>
   <div class="terminal-blank" aria-hidden="true"></div>
 
   {#if !isLoaded}

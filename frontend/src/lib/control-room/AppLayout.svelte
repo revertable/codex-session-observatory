@@ -5,13 +5,13 @@
     transcript: Snippet
     panel: Snippet
     collectionOpen: boolean
+    navigator?: Snippet
   }
-  let { transcript, panel, collectionOpen }: Props = $props()
+  let { transcript, panel, collectionOpen, navigator }: Props = $props()
 </script>
 
-<!-- A future navigator belongs beside these workspace columns, not inside a
-     transcript renderer or the collection's state. -->
-<div class="observatory-workspace" class:collection-open={collectionOpen}>
+<div class="observatory-workspace" class:collection-open={collectionOpen} class:has-navigator={!!navigator}>
+  {#if navigator}<aside class="workspace-navigator">{@render navigator()}</aside>{/if}
   <div class="workspace-transcript">{@render transcript()}</div>
   <aside id="collection-panel" class="workspace-collection" hidden={!collectionOpen} aria-label="Collection Panel">
     {@render panel()}
