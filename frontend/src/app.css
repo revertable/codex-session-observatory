@@ -454,17 +454,19 @@ code {
 .observatory-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 0;
   align-items: start;
-}
-
-.observatory-workspace.collection-open {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 32%);
 }
 
 .workspace-transcript,
 .workspace-collection {
   min-width: 0;
+}
+
+/* The idle DM header needs a second row when side panels narrow Transcript. */
+.workspace-transcript .chat-transcript-header {
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .workspace-collection {
@@ -473,16 +475,37 @@ code {
   margin-top: 12px;
 }
 
-.workspace-collection[hidden] {
+.workspace-collection[hidden],
+.workspace-navigator[hidden] {
   display: none;
 }
 
-.observatory-workspace.has-navigator {
-  grid-template-columns: 260px minmax(0, 1fr);
+.panel-separator {
+  align-self: stretch;
+  min-height: 260px;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
 }
 
-.observatory-workspace.has-navigator.collection-open {
-  grid-template-columns: 260px minmax(0, 1fr) minmax(240px, 28%);
+.panel-separator::after {
+  content: '';
+  position: absolute;
+  inset: 12px 3px 0;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.panel-separator:hover::after,
+.panel-separator.dragging::after,
+.panel-separator:focus-visible::after {
+  background: var(--accent);
+}
+
+.panel-separator:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .workspace-navigator {
@@ -647,13 +670,6 @@ code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   tab-size: 4;
-}
-
-@media (max-width: 760px) {
-  .observatory-workspace.collection-open {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 40%);
-    gap: 8px;
-  }
 }
 
 .specialized-session {

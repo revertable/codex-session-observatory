@@ -1,10 +1,96 @@
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { startClientHarness } from './helpers/client-dom-harness.ts'
+import assert from 'node:assert/strict'
 
 let harness: Awaited<ReturnType<typeof startClientHarness>>
 before(async () => { harness = await startClientHarness() }, { timeout: 60000 })
 after(async () => { await harness?.close() })
+
+test('workspace panels resize independently and retain mounted state at minimum, default and wide sizes', { timeout: 60000 }, async () => {
+  const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  // This emulates WebView DPI; native frame/work-area fit is verified separately in Tauri.
+  const size = (width: number, height: number, scale = 1) => workspace.send('Emulation.setDeviceMetricsOverride', {
+    width, height, deviceScaleFactor: scale, mobile: false,
+    screenWidth: Math.round(1920 / scale), screenHeight: Math.round(1080 / scale),
+  })
+  const bounds = (name: string) => workspace.evaluate(`(() => { const e = document.querySelector('[aria-label="Resize ${name}"]'); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:Math.max(r.y+20,Math.min(r.bottom-20,innerHeight-40)),value:Number(e.getAttribute('aria-valuenow'))} })()`)
+  const drag = async (name: string, delta: number) => {
+    const point = await bounds(name)
+    await workspace.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+    await workspace.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x + delta, y: point.y, button: 'left', buttons: 1 })
+    await workspace.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x + delta, y: point.y, button: 'left', clickCount: 1 })
+    await workspace.evaluate('new Promise(r => setTimeout(r, 60))')
+    return { before: point.value, after: (await bounds(name)).value }
+  }
+  try {
+    await size(1100, 720)
+    await workspace.evaluate('globalThis.__workspaceStart()')
+    for (const [width, height, scale] of [[1100,720,1],[1360,760,1],[1360,760,1.25],[1600,1000,1]]) {
+      await size(width, height, scale)
+      assert.equal(await workspace.evaluate('devicePixelRatio'), scale)
+      for (const theme of ['Terminal Style','DM Style (Dark)','DM Style','Markdown Style']) {
+        for (const [left,right] of [[true,true],[false,true],[true,false],[false,false]]) {
+          await workspace.evaluate(`globalThis.__workspaceCombination(${left},${right},${JSON.stringify(theme)})`)
+        }
+      }
+    }
+    await workspace.evaluate('globalThis.__workspaceCombination(true,true,"Terminal Style")')
+    const left = await drag('Sessions', 90); assert.ok(left.after > left.before + 80)
+    const right = await drag('Collection', -70); assert.ok(right.after > right.before + 60)
+    await size(1100,720); await workspace.evaluate('new Promise(r=>setTimeout(r,80))')
+    assert.ok((await bounds('Sessions')).value >= 220 && (await bounds('Collection')).value >= 260)
+    await size(1600,1000); await workspace.evaluate('new Promise(r=>setTimeout(r,80))')
+    assert.equal((await bounds('Sessions')).value, left.after)
+    assert.equal((await bounds('Collection')).value, right.after)
+    for (const [name, key, code] of [['Sessions','ArrowLeft',37],['Collection','ArrowRight',39]] as const) {
+      const prior = await bounds(name)
+      await workspace.evaluate(`document.querySelector('[aria-label="Resize ${name}"]').focus()`)
+      await workspace.send('Input.dispatchKeyEvent', { type:'keyDown', key, code:key, windowsVirtualKeyCode:code })
+      await workspace.send('Input.dispatchKeyEvent', { type:'keyUp', key, code:key, windowsVirtualKeyCode:code })
+      assert.equal((await bounds(name)).value, prior.value - 10)
+      const point = await bounds(name)
+      await workspace.send('Input.dispatchMouseEvent', { type:'mousePressed', x:point.x, y:point.y, button:'left', clickCount:1 })
+      await workspace.evaluate(`document.querySelector('[aria-label="Resize ${name}"]').dispatchEvent(new PointerEvent('pointercancel'))`)
+      await workspace.send('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'left', clickCount:1 })
+      assert.equal(await workspace.evaluate('document.querySelectorAll(".dragging").length'), 0)
+    }
+    await size(1100,720)
+    const limitedLeft = await drag('Sessions', -2000); assert.equal(limitedLeft.after,220)
+    const limitedRight = await drag('Collection', 2000); assert.equal(limitedRight.after,260)
+    const capped = await drag('Sessions', 2000); assert.ok(capped.after <= 433)
+    await workspace.evaluate('globalThis.__workspaceTree()')
+    await workspace.evaluate('globalThis.__workspaceStop()')
+  } finally { await workspace.close() }
+})
+
+test('default and minimum layouts remain usable under Full HD and 4K DPI emulation', { timeout: 120000 }, async () => {
+  const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    await workspace.evaluate('globalThis.__workspaceStart()')
+    // Emulated screen dimensions do not enforce native window constraints or model taskbars.
+    for (const [screenWidth, screenHeight, scale] of [
+      [1920,1080,1], [1920,1080,1.25],
+      [3840,2160,1.5], [3840,2160,2], [3840,2160,2.5], [3840,2160,3],
+    ]) {
+      for (const [width, height] of [[1360,760], [1100,720]]) {
+        await workspace.send('Emulation.setDeviceMetricsOverride', {
+          width, height, deviceScaleFactor: scale, mobile: false,
+          screenWidth: Math.round(screenWidth / scale), screenHeight: Math.round(screenHeight / scale),
+        })
+        const actual = await workspace.evaluate('({width:innerWidth,height:innerHeight,scale:devicePixelRatio,screenWidth:screen.width,screenHeight:screen.height})')
+        assert.deepEqual(actual, { width, height, scale, screenWidth: Math.round(screenWidth / scale), screenHeight: Math.round(screenHeight / scale) })
+        for (const theme of ['Terminal Style','DM Style (Dark)','DM Style','Markdown Style']) {
+          await workspace.evaluate(`globalThis.__workspaceCombination(true,true,${JSON.stringify(theme)})`)
+        }
+        for (const [left,right] of [[false,true],[true,false],[false,false],[true,true]]) {
+          await workspace.evaluate(`globalThis.__workspaceCombination(${left},${right},"Terminal Style")`)
+        }
+      }
+    }
+    await workspace.evaluate('globalThis.__workspaceStop()')
+  } finally { await workspace.close() }
+})
 
 test('Session Navigator pages, hierarchy, badges, selection and Reload preserve the existing workspace', { timeout: 60000 }, async () => {
   const navigatorHarness = await startClientHarness({

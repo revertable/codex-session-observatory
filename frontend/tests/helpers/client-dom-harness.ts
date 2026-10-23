@@ -68,7 +68,7 @@ export async function startClientHarness(options: { entry?: string; plugins?: Pl
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     const profile = join(directory, 'profile')
     browser = spawn(executable, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile,
-      '--no-first-run', '--no-default-browser-check', '--disable-features=BackForwardCache', '--window-size=1220,820', 'about:blank'], { stdio: 'ignore', windowsHide: true })
+      '--no-first-run', '--no-default-browser-check', '--disable-features=BackForwardCache', '--window-size=1360,760', 'about:blank'], { stdio: 'ignore', windowsHide: true })
     let port = ''
     for (let attempt = 0; attempt < 100; attempt++) {
       try { port = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]; break } catch { await delay(100) }

@@ -17,6 +17,8 @@
     filter: FilterDto
     selectedTheme: TranscriptThemeName
     collectionOpen: boolean
+    sessionsOpen: boolean
+    onToggleSessions: () => void
     onToggleCollection: () => void
     onScrollBottom: () => void
     isExportingWorklog: boolean
@@ -40,6 +42,8 @@
     filter,
     selectedTheme,
     collectionOpen,
+    sessionsOpen,
+    onToggleSessions,
     onToggleCollection,
     onScrollBottom,
     isExportingWorklog,
@@ -201,6 +205,14 @@
         {/each}
       </select>
     </label>
+    <button type="button" class="collection-panel-toggle" class:active={sessionsOpen}
+      aria-label={sessionsOpen ? 'Hide Sessions' : 'Show Sessions'}
+      title={sessionsOpen ? 'Hide Sessions' : 'Show Sessions'}
+      aria-expanded={sessionsOpen} aria-controls="sessions-panel" onclick={onToggleSessions}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M5 8h2M5 12h2M5 16h2" />
+      </svg>
+    </button>
     <button
       type="button"
       class="collection-panel-toggle"

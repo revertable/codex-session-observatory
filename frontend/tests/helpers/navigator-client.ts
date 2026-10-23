@@ -82,6 +82,78 @@ const entries = () => Array.from(target.querySelectorAll('.session-entry'))
 const scrollBottom = async () => { const list = target.querySelector('.navigator-list')!; list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event('scroll')); await settle() }
 const status = () => target.querySelector('[data-status]')?.getAttribute('data-status')
 
+let workspaceInstance: ReturnType<typeof mount> | undefined
+let workspaceItems = ''
+let workspaceList: Element | null
+;(globalThis as any).__workspaceStart = async () => {
+  workspaceInstance = mount(App, { target }); await settle()
+  await click(target.querySelector('[aria-label="Show Collection"]'))
+  const separator = target.querySelector<HTMLElement>('[aria-label="Resize Sessions"]')!
+  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); await settle()
+  for (const theme of ['DM Style', 'DM Style (Dark)']) {
+    const select = target.querySelector('select')!
+    select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+    const header = target.querySelector('.chat-transcript-header')!
+    const title = header.firstElementChild!.getBoundingClientRect()
+    const notice = header.querySelector('.chat-empty-state')!.getBoundingClientRect()
+    assert(title.right <= notice.left || title.bottom <= notice.top || notice.right <= title.left, 'idle DM title and notice do not overlap')
+  }
+  const themeSelect = target.querySelector('select')!
+  themeSelect.value = 'Terminal Style'; themeSelect.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })); await settle()
+  for (let step = 0; step < 4; step++) {
+    separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await settle()
+  }
+  await scrollBottom(); await scrollBottom()
+  await click(row(0))
+  await click(target.querySelector('.terminal-block [aria-label="Add to Collection"]'))
+  workspaceItems = target.querySelector('#collection-panel')!.textContent!
+  workspaceList = target.querySelector('.navigator-list')
+}
+;(globalThis as any).__workspaceCombination = async (left: boolean, right: boolean, theme: string) => {
+  const before = target.querySelector('.workspace-transcript')!.firstElementChild
+  const block = target.querySelector('.terminal-block, .chat-block, .markdown-block')
+  for (const [id, open, name] of [['sessions-panel', left, 'Sessions'], ['collection-panel', right, 'Collection']] as const) {
+    const panel = target.querySelector<HTMLElement>('#' + id)!
+    if (panel.hidden === open) await click(target.querySelector(`[aria-label="${open ? 'Show' : 'Hide'} ${name}"]`))
+  }
+  assert(target.querySelector('.workspace-transcript')!.firstElementChild === before && (!block || target.contains(block)), 'Transcript survives toggles')
+  const select = target.querySelector('select')!
+  select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+  const transcript = target.querySelector('.workspace-transcript')!.getBoundingClientRect()
+  const workspace = target.querySelector('.observatory-workspace')!.getBoundingClientRect()
+  assert(transcript.width >= 359, 'Transcript minimum at ' + innerWidth)
+  assert(target.querySelectorAll('[role="separator"]').length === Number(left) + Number(right), 'visible boundaries only')
+  assert(target.querySelector('.navigator-list') === workspaceList && entries().length === 43, 'Navigator stays mounted with pages')
+  assert(target.querySelector('#collection-panel')!.textContent === workspaceItems, 'collection snapshots preserved')
+  assert(row(0)?.getAttribute('aria-current') === 'true', 'selected session preserved')
+  if (!left && !right) assert(Math.abs(transcript.width - workspace.width) < 1, 'Transcript expands to full workspace')
+  assert(document.documentElement.scrollWidth <= innerWidth, 'no page horizontal overflow')
+  return { transcript: transcript.width, workspace: workspace.width }
+}
+;(globalThis as any).__workspaceTree = async () => {
+  await toggle()
+  const day = target.querySelector<HTMLDetailsElement>('.navigator-day')!
+  day.open = false
+  const list = target.querySelector<HTMLElement>('.navigator-list')!
+  list.scrollTop = 40
+  const scroll = list.scrollTop
+  const counts = [reloads, flatCalls, hierarchyCalls]
+  await click(target.querySelector('[aria-label="Hide Sessions"]'))
+  await click(target.querySelector('[aria-label="Show Sessions"]'))
+  assert(day === target.querySelector('.navigator-day') && !day.open, 'tree expansion survives hiding')
+  assert(list.scrollTop === scroll && mode() === 'Hierarchical', 'mode and scroll retained')
+  assert(JSON.stringify(counts) === JSON.stringify([reloads, flatCalls, hierarchyCalls]), 'toggle does not fetch')
+  day.open = true
+  await click(button('Refresh'))
+  assert(target.querySelector('#collection-panel')!.textContent === workspaceItems, 'Refresh preserves Collection')
+  await click(reloadButton())
+  assert(target.querySelector('#collection-panel')!.textContent === workspaceItems, 'Reload preserves Collection')
+  await click(row(1))
+  assert((target.querySelector('#collection-panel') as HTMLElement).hidden && !target.querySelector('#collection-panel article'), 'session change still clears and closes')
+}
+;(globalThis as any).__workspaceStop = async () => { await unmount(workspaceInstance!); workspaceInstance = undefined }
+
 async function verifyUntitled() {
   const originalParses = parses.length
   const originalStatus = status()

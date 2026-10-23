@@ -51,6 +51,7 @@
   let collapsedBlocks: Record<number, boolean> = {}
   let publicReleaseStatus: PublicReleaseStatus | null = null
   let collection = createCollectionState()
+  let sessionsOpen = true
   let loadGeneration = 0
   $: messageIds = identifyMessages(
     workflow.selected_file.path,
@@ -414,6 +415,8 @@
     filter={workflow.filter}
     {selectedTheme}
     collectionOpen={collection.isOpen}
+    {sessionsOpen}
+    onToggleSessions={() => { sessionsOpen = !sessionsOpen }}
     onToggleCollection={() => { collection = { ...collection, isOpen: !collection.isOpen } }}
     onScrollBottom={scrollPageToBottom}
     {isExportingWorklog}
@@ -428,7 +431,7 @@
     onThemeChange={handleThemeChange}
   />
 
-  <AppLayout collectionOpen={collection.isOpen}>
+  <AppLayout collectionOpen={collection.isOpen} {sessionsOpen}>
   {#snippet navigator()}
     <SessionNavigator selectedPath={workflow.selected_file.path}
       selectedThreadId={workflow.loaded_file.session?.identity?.thread_id ?? null}

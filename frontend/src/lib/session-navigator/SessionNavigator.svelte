@@ -23,7 +23,7 @@
   })
 
   function nearBottom() {
-    if (viewport && $navigator.mode === 'Flat' && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 100) {
+    if (viewport && viewport.clientHeight > 0 && $navigator.mode === 'Flat' && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 100) {
       void navigator.more()
     }
   }
