@@ -49,7 +49,7 @@
   let publicReleaseStatus: PublicReleaseStatus | null = null
   let collection = createCollectionState()
   $: messageIds = identifyMessages(
-    workflow.loaded_file.metadata?.absolute_path ?? '',
+    workflow.selected_file.path,
     workflow.all_observations.transcript_blocks,
   )
   $: collectedIds = new Set(collection.items.map(item => item.id))
@@ -361,10 +361,6 @@
     }
   }
 
-  function hasSelectedPath() {
-    return workflow.selected_file.path.trim() !== ''
-  }
-
   function normalizeLoadError(error: unknown): ApiErrorDto {
     if (isApiError(error)) {
       return error
@@ -448,7 +444,7 @@
 
   <TranscriptActions
     status={workflow.status}
-    hasSelectedPath={hasSelectedPath()}
+    hasSelectedPath={workflow.selected_file.path.trim() !== ''}
     canCaptureTranscript={workflow.loaded_file.session?.capabilities.can_show_transcript === true}
     actionStatusMessage={transcriptActionStatusMessage}
     onCapture={captureTranscript}

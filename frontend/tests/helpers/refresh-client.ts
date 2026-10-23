@@ -8,13 +8,16 @@ const blocks = () => Array.from(target.querySelectorAll('.terminal-block'))
 let resolveLoad: (response: ParseResponseDto) => void
 let rejectLoad: (error: Error) => void
 let requests = 0
+let selectedPath = 'session.jsonl'
+let requestedPath = ''
 ;(window as any).__TAURI_INTERNALS__ = {
-  invoke: async (command: string) => {
+  invoke: async (command: string, args?: { path?: string }) => {
     if (command === 'resolve_jsonl_initial_directory') return '.'
-    if (command === 'plugin:dialog|open') return 'session.jsonl'
+    if (command === 'plugin:dialog|open') return selectedPath
     if (command === 'plugin:app|version') throw new Error('No update check in test')
     if (command === 'parse_selected_jsonl') {
       requests++
+      requestedPath = args?.path ?? ''
       return new Promise<ParseResponseDto>((resolve, reject) => { resolveLoad = resolve; rejectLoad = reject })
     }
     throw new Error('Unexpected command: ' + command)
@@ -87,3 +90,51 @@ const response: ParseResponseDto = {
   } finally { await unmount(instance) }
 }
 ;(globalThis as any).__domReady = true
+
+;(globalThis as any).__refreshButtonsCase = async () => {
+  for (const path of ['session.jsonl', 'session.jsonl.zst']) {
+    selectedPath = path
+    const instance = mount(App, { target })
+    const refreshButtons = () => Array.from(target.querySelectorAll('button'))
+      .filter(button => button.textContent?.trim() === 'Refresh')
+    const panel = () => target.querySelector<HTMLElement>('#collection-panel')!
+    const collectionBodies = () => Array.from(panel().querySelectorAll('article pre')).map(node => node.textContent)
+    const resolve = async (physicalPath = path) => {
+      const result = structuredClone(response)
+      result.source.absolute_path = physicalPath
+      result.source.file_name = physicalPath
+      resolveLoad(result); await settle()
+    }
+    try {
+      await settle()
+      assert(refreshButtons().length === 2 && refreshButtons().every(button => button.disabled), 'both Refresh buttons disabled initially')
+      await click('Select JSONL')
+      assert(refreshButtons().every(button => !button.disabled), 'both Refresh buttons react to selected path: ' + path)
+      await resolve()
+      const toggles = target.querySelectorAll<HTMLButtonElement>('.terminal-block .collection-toggle')
+      for (const index of [1, 0]) { toggles[index].click(); await settle() }
+      const expected = collectionBodies()
+      assert(expected.join('|') === response.parsed_chat_log.transcript_blocks.map(block => block.content).join('|'), 'collection uses source order')
+      assert(!panel().hidden, 'collection opens on first add')
+      for (const index of [0, 1]) {
+        for (const fail of [false, true]) {
+          const count = requests
+          refreshButtons()[index].click(); await settle()
+          assert(requests === count + 1 && requestedPath === path && status() === 'loading', 'same loading command and selected path for both buttons')
+          assert(JSON.stringify(collectionBodies()) === JSON.stringify(expected), 'collection retained while pending')
+          if (fail) { rejectLoad(new Error('Refresh failure')); await settle() }
+          else await resolve(path.endsWith('.zst') ? 'session.jsonl' : 'session.jsonl.zst')
+          assert(JSON.stringify(collectionBodies()) === JSON.stringify(expected), 'collection contents and order retained after refresh')
+          assert(panel().hidden === (index === 1), 'panel state retained after refresh')
+          assert(Array.from(target.querySelectorAll('.terminal-block .collection-toggle')).every(button => button.getAttribute('aria-pressed') === 'true'), 'collected indicators retained after physical format change')
+        }
+        if (index === 0) {
+          target.querySelector<HTMLButtonElement>('[aria-label="Hide Collection"]')!.click(); await settle()
+        }
+      }
+      refreshButtons()[1].click(); await settle(); await resolve()
+      assert(status() === 'loaded' && panel().hidden, 'bottom Refresh retries after failure with closed panel preserved')
+    } finally { await unmount(instance) }
+  }
+  selectedPath = 'session.jsonl'
+}
