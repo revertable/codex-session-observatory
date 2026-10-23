@@ -5,6 +5,22 @@ import type { ParseResponseDto } from '../../src/lib/parse-contract'
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message) }
 const settle = async () => { flushSync(); await tick(); await new Promise(resolve => setTimeout(resolve, 0)); flushSync() }
+const waitForPageScroll = (destination: () => number, label: string) => new Promise<void>((resolve, reject) => {
+  let matchingFrames = 0
+  let frame = 0
+  const timeout = setTimeout(() => {
+    cancelAnimationFrame(frame)
+    reject(new Error(`${label}: scrollY=${window.scrollY}, target=${destination()}`))
+  }, 5000)
+  const observe = () => {
+    matchingFrames = Math.abs(window.scrollY - destination()) <= 1 ? matchingFrames + 1 : 0
+    if (matchingFrames >= 2) {
+      clearTimeout(timeout)
+      resolve()
+    } else frame = requestAnimationFrame(observe)
+  }
+  frame = requestAnimationFrame(observe)
+})
 const target = document.querySelector('#target') as HTMLElement
 let copied = ''
 Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
@@ -74,11 +90,34 @@ const click = async (label: string) => {
     }).join('\n\n---\n\n')
     assert(copied === expected, 'clipboard header and raw body match panel')
 
-    await click('Scroll to Bottom'); await new Promise(resolve => setTimeout(resolve, 300))
     const bottom = () => document.documentElement.scrollHeight - window.innerHeight
+    assert(bottom() > 0, 'fixture requires a scrollable page')
+    await click('Scroll to Bottom')
+    await waitForPageScroll(bottom, 'animated Bottom completion')
     assert(bottom() > 0 && Math.abs(window.scrollY - bottom()) <= 1, 'animated Bottom reaches page end')
-    await click('Top'); await new Promise(resolve => setTimeout(resolve, 300))
+    await click('Top')
+    await waitForPageScroll(() => 0, 'animated Top completion')
     assert(window.scrollY === 0, 'animated Top retained')
+
+    // Reproduce a late rendering frame that outlasts the former 300ms assertion.
+    // The assertion must wait for the real destination, not elapsed wall time.
+    const originalRequestFrame = window.requestAnimationFrame
+    let delayedFrameRan = false
+    try {
+      window.requestAnimationFrame = callback => {
+        window.requestAnimationFrame = originalRequestFrame
+        setTimeout(() => originalRequestFrame.call(window, now => {
+          delayedFrameRan = true
+          callback(now)
+        }), 400)
+        return 0
+      }
+      await click('Scroll to Bottom')
+      await waitForPageScroll(bottom, 'delayed-frame Bottom completion')
+      assert(delayedFrameRan && Math.abs(window.scrollY - bottom()) <= 1, 'Bottom reaches page end after a late frame')
+    } finally { window.requestAnimationFrame = originalRequestFrame }
+    await click('Top')
+    await waitForPageScroll(() => 0, 'Top after delayed-frame Bottom')
     window.matchMedia = ((query: string) => query === '(prefers-reduced-motion: reduce)'
       ? { matches: true } as MediaQueryList : originalMatchMedia.call(window, query))
     await click('Scroll to Bottom')
