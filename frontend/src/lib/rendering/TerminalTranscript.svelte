@@ -1,6 +1,7 @@
 <script lang="ts">
   import { openExternalLink } from './external-links.ts'
   import MessageContent from './MessageContent.svelte'
+  import CollectionToggle from '../collection/CollectionToggle.svelte'
   import type { ObservedEventCountDto, ReferencedConversationDto, TranscriptBlockDto } from '../parse-contract'
   import type { PublicReleaseStatus } from '../update-check'
   import { formatEntryTimestamp } from './entry-timestamp.ts'
@@ -22,6 +23,8 @@
     references: ReferencedConversationDto[]
     collapsedBlocks: Readonly<Record<number, boolean>>
     onToggleBlock: (index: number) => void
+    collectedBlocks?: readonly boolean[]
+    onToggleCollection?: (index: number) => void
   }
 
   let {
@@ -34,6 +37,8 @@
     references,
     collapsedBlocks,
     onToggleBlock,
+    collectedBlocks = [],
+    onToggleCollection,
   }: Props = $props()
 
   const separator = '========================================================================'
@@ -99,6 +104,7 @@
         {@const isCollapsed = collapsedBlocks[index] ?? false}
         {@const timestamp = formatEntryTimestamp(block.timestamp)}
         <section class="terminal-block" data-family={label.family} data-kind={block.entry_type}>
+          <div class="transcript-message-header">
           <button
             type="button"
             class="terminal-block-toggle"
@@ -111,6 +117,10 @@
                 title={`Original timestamp: ${timestamp.datetime}`}
               > · {timestamp.label}</time>{/if}
           </button>
+          {#if onToggleCollection}
+            <CollectionToggle selected={collectedBlocks[index] ?? false} onToggle={() => onToggleCollection?.(index)} />
+          {/if}
+          </div>
           {#if !isCollapsed}
             <MessageContent {block} />
           {/if}

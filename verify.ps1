@@ -164,6 +164,12 @@ Invoke-VerificationStep `
     -WorkingDirectory $frontendDirectory
 
 Invoke-VerificationStep `
+    -Name 'Frontend browser integration tests' `
+    -Command $npmCommand `
+    -Arguments @('run', 'test:browser') `
+    -WorkingDirectory $frontendDirectory
+
+Invoke-VerificationStep `
     -Name 'Svelte and TypeScript checks' `
     -Command $npmCommand `
     -Arguments @('run', 'check') `

@@ -23,6 +23,7 @@ Frontend commands run from `frontend/`:
 
 ```text
 npm test
+npm run test:browser
 npm run check
 npm run build
 npm run tauri:dev
@@ -39,6 +40,20 @@ cargo test --manifest-path frontend/src-tauri/Cargo.toml
 
 Install frontend dependencies with `npm ci` from `frontend/` before running npm
 commands in a fresh checkout.
+
+## Browser Integration Environment
+
+`npm test` retains its Node-only environment contract. Browser integration is a
+separate script and is also required by `verify.ps1`, including CI. The harness
+uses an installed Chrome, Edge, or Chromium executable; it does not download a
+browser or add an npm dependency. Set `OBSERVATORY_TEST_BROWSER` to an explicit
+executable when the standard installation paths are unavailable. A missing
+browser fails integration verification rather than silently skipping tests.
+
+SSR HTML assertions have been moved to real client DOM tests. Production uses
+Svelte `mount`; no server renderer or hydration contract is required. Pure
+semantic/Capture assertions remain in unit tests. DOM tests check the actual
+constructor and Theme components rather than an alternate test renderer.
 
 ## Continuous Integration
 
@@ -78,7 +93,8 @@ boundaries remain separate from automated verification.
 | Check | Coverage | Notes |
 | --- | --- | --- |
 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify.ps1` | Complete frontend, backend, and desktop automated verification | Runs the full sequence below and stops at the first failing step. It does not install dependencies, package a portable ZIP, or launch the application. |
-| `npm test` | Frontend workflow, transcript projection and capture, and update-check behavior | Runs the TypeScript tests listed in `frontend/package.json`. |
+| `npm test` | Frontend workflow, semantic AST, safe DOM construction, transcript capture, and update-check unit behavior | Node-only; no installed browser is required. |
+| `npm run test:browser` | Real client DOM, attachment lifecycle, link handling, technical blocks, four themes, and collapse/expand | Requires installed Chrome/Edge/Chromium. Uses an isolated headless profile and localhost test server. |
 | `npm run check` | Svelte and TypeScript static validation | Does not run frontend or Rust tests. |
 | `npm run build` | Production frontend bundle | Also runs automatically before a Tauri build. |
 | `cargo test --manifest-path backend/Cargo.toml` | Parser, inspection, session routing, domain, API, and Worklog behavior | This is the primary Observatory Core test suite. |
@@ -97,7 +113,7 @@ combine their requirements.
 | --- | --- | --- |
 | Documentation only | Inspect the rendered Markdown, links, paths, and commands; confirm `git diff --check` | Run referenced commands when the documentation changes their contract or expected output. |
 | Frontend state, load workflow, filters, or update check | `npm test`; `npm run check`; `npm run build` | `npm run tauri:dev` for interaction or platform behavior. |
-| Transcript rendering, themes, collapse, or capture | `npm test`; `npm run check`; `npm run build` | Manually inspect each affected presentation and relevant filtered/collapsed states in `npm run tauri:dev`. |
+| Transcript rendering, themes, collapse, or capture | `npm test`; `npm run test:browser`; `npm run check`; `npm run build` | Manually inspect each affected presentation and relevant filtered/collapsed states in `npm run tauri:dev`. |
 | Backend parser, transport decoding, inspection, domain, or session routing | `cargo test --manifest-path backend/Cargo.toml` | Add `npm test` and a desktop smoke check when transported data or visible behavior changes. |
 | Backend API or Worklog export | `cargo test --manifest-path backend/Cargo.toml` | Run the applicable frontend checks when DTOs or UI-visible behavior change; manually inspect generated Worklog output when export structure changes. |
 | Tauri commands or desktop bridge | `cargo test --manifest-path frontend/src-tauri/Cargo.toml`; `npm run check`; `npm run build` | Run backend tests when backend contracts change; use `npm run tauri:dev` for command integration. |
@@ -121,6 +137,7 @@ the first failure:
 ```text
 cd frontend
 npm test
+npm run test:browser
 npm run check
 npm run build
 cd ..

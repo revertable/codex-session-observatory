@@ -122,8 +122,9 @@ export function applyParseResponse(
 }
 
 export function failLoad(state: LoadWorkflowState, error: ApiErrorDto): LoadWorkflowState {
+  // Request failure does not invalidate the last successful load.
   return {
-    ...clearLoadedResult(state),
+    ...state,
     status: 'error',
     error,
   }

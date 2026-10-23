@@ -431,6 +431,8 @@
 
 .terminal-separator {
   color: #878787;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .terminal-blank {
@@ -439,6 +441,68 @@
 
 .terminal-block {
   margin: 0;
+}
+
+.transcript-message-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.transcript-message-header > .markdown-block-toggle,
+.transcript-message-header > .chat-block-toggle,
+.transcript-message-header > .terminal-block-toggle {
+  width: auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.collection-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  color: inherit;
+  background: transparent;
+  opacity: 0.75;
+}
+
+.collection-toggle::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+
+.collection-toggle:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+}
+
+.collection-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.collection-toggle.collected {
+  color: #176b87;
+  opacity: 1;
+}
+
+.terminal-transcript .collection-toggle.collected,
+.chat-transcript[data-chat-theme='dark'] .collection-toggle.collected {
+  color: #91d7a3;
+}
+
+.chat-block[data-family='you'] .collection-toggle.collected {
+  color: #dcfce7;
 }
 
 .terminal-block-toggle {

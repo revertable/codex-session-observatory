@@ -8,6 +8,8 @@ const REFERENCE_HEADING: &str = "## Referenced ChatGPT conversation:";
 const REQUEST_HEADING: &str = "## My request:";
 const AMBIENT_OPEN: &str = "<in-app-browser-context source=\"ambient-ui-state\">";
 const AMBIENT_CLOSE: &str = "</in-app-browser-context>";
+const QUESTION_REPLY_OPEN: &str = "<send_user_message_question_reply>";
+const QUESTION_REPLY_CLOSE: &str = "</send_user_message_question_reply>";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DecodedUserTransport {
@@ -64,7 +66,39 @@ pub(crate) fn decode_user_transport_borrowed(content: &str) -> Option<BorrowedUs
 }
 
 fn decode_normalized_user_transport(content: &str) -> Option<BorrowedUserTransport<'_>> {
-    decode_chatgpt_handoff(content).or_else(|| decode_ambient_ui_request(content))
+    decode_chatgpt_handoff(content)
+        .or_else(|| decode_ambient_ui_request(content))
+        .or_else(|| decode_question_reply(content))
+}
+
+fn decode_question_reply(content: &str) -> Option<BorrowedUserTransport<'_>> {
+    let body = content
+        .trim()
+        .strip_prefix(QUESTION_REPLY_OPEN)?
+        .strip_suffix(QUESTION_REPLY_CLOSE)?;
+    let value: Value = serde_json::from_str(body).ok()?;
+    // Codex accepts a non-empty reply array or a single reply object.
+    let replies = match &value {
+        Value::Array(replies) => replies.as_slice(),
+        Value::Object(_) => std::slice::from_ref(&value),
+        _ => return None,
+    };
+    let mut answers = Vec::new();
+    for reply in replies {
+        reply.get("questionItemId")?.as_str()?;
+        reply.get("question")?.as_str()?;
+        let answer = reply.get("answer")?.as_str()?;
+        if !answer.trim().is_empty() {
+            answers.push(answer);
+        }
+    }
+    if answers.is_empty() {
+        return None;
+    }
+    Some(BorrowedUserTransport::HumanRequest {
+        request: Cow::Owned(answers.join("\n\n")),
+        reference: None,
+    })
 }
 
 fn decode_chatgpt_handoff(content: &str) -> Option<BorrowedUserTransport<'_>> {
@@ -310,5 +344,82 @@ mod tests {
             .is_none()
         );
         assert!(decode_user_transport(&handoff("{not-json}", "Continue.")).is_none());
+    }
+
+    fn question_reply(body: &str) -> String {
+        format!("{QUESTION_REPLY_OPEN}\n{body}\n{QUESTION_REPLY_CLOSE}\n")
+    }
+
+    #[test]
+    fn question_reply_array_and_single_object_yield_only_answers() {
+        let reply = r#"{"questionItemId":"[\"request_user_input_async\",\"call-example\",0]","question":"Sanitized question?","answer":"잠시 기다려 시간이 좀 걸린다."}"#;
+        for body in [reply.to_owned(), format!("[{reply}]")] {
+            let input = question_reply(&body);
+            for input in [input.clone(), input.replace('\n', "\r\n")] {
+                assert_eq!(
+                    decode_user_transport(&input),
+                    Some(DecodedUserTransport::HumanRequest {
+                        request: "잠시 기다려 시간이 좀 걸린다.".to_owned(),
+                        reference: None,
+                    })
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn multiple_question_replies_preserve_answer_order_and_content() {
+        let input = question_reply(
+            r#"[
+            {"questionItemId":"third","question":"Hidden C?","answer":"  Third\nline  "},
+            {"questionItemId":"empty","question":"Hidden?","answer":"  "},
+            {"questionItemId":"first","question":"Hidden A?","answer":"First"},
+            {"questionItemId":"second","question":"Hidden B?","answer":"Third\nline"}
+        ]"#,
+        );
+        assert_eq!(
+            decode_user_transport(&input),
+            Some(DecodedUserTransport::HumanRequest {
+                request: "  Third\nline  \n\nFirst\n\nThird\nline".to_owned(),
+                reference: None,
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_or_embedded_question_replies_fall_back() {
+        for body in [
+            "{bad-json}",
+            "[]",
+            "null",
+            "42",
+            "\"text\"",
+            r#"[{"questionItemId":"q","question":"Q?","answer":" "}]"#,
+            r#"[{"questionItemId":"q","question":"Q?"}]"#,
+            r#"[{"questionItemId":"q","question":"Q?","answer":1}]"#,
+            r#"[{"question":"Q?","answer":"yes"}]"#,
+            r#"[{"questionItemId":"q","question":null,"answer":"yes"}]"#,
+            r#"[{"questionItemId":"q","question":"Q?","answer":"yes"},null]"#,
+        ] {
+            assert!(
+                decode_user_transport(&question_reply(body)).is_none(),
+                "{body}"
+            );
+        }
+        let input = question_reply(r#"[{"questionItemId":"q","question":"Q?","answer":"yes"}]"#);
+        for invalid in [
+            format!("Text before\n{input}"),
+            format!("{input}Text after"),
+            input.replace(QUESTION_REPLY_OPEN, ""),
+            input.replace(QUESTION_REPLY_CLOSE, ""),
+            input.replace(
+                QUESTION_REPLY_OPEN,
+                "<send_user_message_question_reply extra>",
+            ),
+            format!("{input}{input}"),
+        ] {
+            assert!(decode_user_transport(&invalid).is_none(), "{invalid}");
+        }
+        assert!(decode_user_transport("Ordinary user message").is_none());
     }
 }

@@ -1,0 +1,4 @@
+{"type":"session_meta","payload":{"id":"00000000-0000-4000-8000-000000000001","originator":"codex_cli","thread_source":"user","source":"cli"}}
+{"type":"event_msg","timestamp":"2026-10-22T23:33:48.799Z","payload":{"type":"user_message","message":"A — First source message\nSecond line stays unchanged."}}
+{"type":"event_msg","timestamp":"2026-10-22T01:33:48.100Z","payload":{"type":"agent_message","message":"B — Second source message\n\n```ts\n  const greeting = 'Hello';\n\tconsole.log(greeting);\n```\nTrailing spaces stay here:  "}}
+{"type":"response_item","timestamp":"2026-10-22T01:33:48.900Z","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"echo Collection GUI fixture\"}","call_id":"collection-ui-tool"}}

@@ -21,9 +21,13 @@
   import SessionHeader from './lib/control-room/SessionHeader.svelte'
   import SpecializedSessionPanel from './lib/control-room/SpecializedSessionPanel.svelte'
   import TranscriptActions from './lib/control-room/TranscriptActions.svelte'
-  import ChatTranscript from './lib/rendering/ChatTranscript.svelte'
-  import MarkdownTranscript from './lib/rendering/MarkdownTranscript.svelte'
-  import TerminalTranscript from './lib/rendering/TerminalTranscript.svelte'
+  import AppLayout from './lib/control-room/AppLayout.svelte'
+  import TranscriptViewer from './lib/rendering/TranscriptViewer.svelte'
+  import CollectionPanel from './lib/collection/CollectionPanel.svelte'
+  import {
+    createCollectionState, collectionForSelectedPath, identifyMessages,
+    toggleCollectedMessage, clearCollection,
+  } from './lib/collection/collection-state'
   import { serializeTranscript } from './lib/rendering/transcript-capture'
   import { transcriptScopeChanged } from './lib/rendering/transcript-scope'
   import {
@@ -43,6 +47,29 @@
   let selectedTheme: TranscriptThemeName = 'Terminal Style'
   let collapsedBlocks: Record<number, boolean> = {}
   let publicReleaseStatus: PublicReleaseStatus | null = null
+  let collection = createCollectionState()
+  $: messageIds = identifyMessages(
+    workflow.loaded_file.metadata?.absolute_path ?? '',
+    workflow.all_observations.transcript_blocks,
+  )
+  $: collectedIds = new Set(collection.items.map(item => item.id))
+  $: collectedBlocks = workflow.observations.transcript_blocks.map(block =>
+    collectedIds.has(messageIds.get(block) ?? ''),
+  )
+
+  function toggleCollection(index: number) {
+    const block = workflow.observations.transcript_blocks[index]
+    const id = messageIds.get(block)
+    if (id !== undefined) {
+      const sourceIndex = workflow.all_observations.transcript_blocks.indexOf(block)
+      collection = toggleCollectedMessage(collection, id, block, sourceIndex)
+    }
+  }
+
+  function selectJsonl(path: string) {
+    collection = collectionForSelectedPath(collection, workflow.selected_file.path, path)
+    replaceWorkflow(selectPath(workflow, path))
+  }
 
   onMount(() => {
     let active = true
@@ -100,7 +127,7 @@
     const selectedPath = await selectJsonlPath()
 
     if (selectedPath !== null) {
-      replaceWorkflow(selectPath(workflow, selectedPath))
+      selectJsonl(selectedPath)
       actionStatusMessage = ''
       transcriptActionStatusMessage = ''
       parentSessionStatusMessage = ''
@@ -147,6 +174,7 @@
     }
 
     replaceWorkflow(createInitialLoadWorkflowState())
+    collection = createCollectionState()
     actionStatusMessage = ''
     transcriptActionStatusMessage = ''
     parentSessionStatusMessage = ''
@@ -210,14 +238,23 @@
   }
 
   function scrollPageToTop() {
+    scrollPageTo(0)
+  }
+
+  function scrollPageToBottom() {
+    const page = document.scrollingElement ?? document.documentElement
+    scrollPageTo(Math.max(0, page.scrollHeight - window.innerHeight))
+  }
+
+  function scrollPageTo(targetY: number) {
     const startY = window.scrollY
 
-    if (startY === 0) {
+    if (startY === targetY) {
       return
     }
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      window.scrollTo(0, 0)
+      window.scrollTo(0, targetY)
       return
     }
 
@@ -227,7 +264,7 @@
     function step(now: number) {
       const progress = Math.min((now - startedAt) / duration, 1)
       const easedProgress = 1 - Math.pow(1 - progress, 3)
-      window.scrollTo(0, startY * (1 - easedProgress))
+      window.scrollTo(0, startY + (targetY - startY) * easedProgress)
 
       if (progress < 1) {
         requestAnimationFrame(step)
@@ -311,7 +348,7 @@
         return
       }
 
-      replaceWorkflow(selectPath(workflow, result.path))
+      selectJsonl(result.path)
       await loadSelectedJsonl(result.path)
       if (workflow.status === 'loaded') {
         actionStatusMessage = 'Parent session opened.'
@@ -363,6 +400,9 @@
     session={workflow.loaded_file.session}
     filter={workflow.filter}
     {selectedTheme}
+    collectionOpen={collection.isOpen}
+    onToggleCollection={() => { collection = { ...collection, isOpen: !collection.isOpen } }}
+    onScrollBottom={scrollPageToBottom}
     {isExportingWorklog}
     {actionStatusMessage}
     errorMessage={workflow.error?.message ?? null}
@@ -375,6 +415,8 @@
     onThemeChange={handleThemeChange}
   />
 
+  <AppLayout collectionOpen={collection.isOpen}>
+  {#snippet transcript()}
   <section class="terminal-section" aria-label="Transcript view">
     <article
       class:terminal-panel={renderPathForTheme(selectedTheme) === 'terminal'}
@@ -387,39 +429,18 @@
           parentStatusMessage={parentSessionStatusMessage}
           onOpenParent={openParentSession}
         />
-      {:else if renderPathForTheme(selectedTheme) === 'terminal'}
-        <TerminalTranscript
-          theme={selectedTheme}
-          isLoaded={workflow.status === 'loaded'}
-          {publicReleaseStatus}
-          showIdentityNote={workflow.status !== 'loaded'}
-          observedEventCounts={workflow.loaded_file.observed_event_counts}
-          blocks={workflow.observations.transcript_blocks}
-          references={workflow.observations.referenced_conversations}
-          {collapsedBlocks}
-          onToggleBlock={toggleTranscriptBlock}
-        />
-      {:else if renderPathForTheme(selectedTheme) === 'markdown'}
-        <MarkdownTranscript
-          theme={selectedTheme}
-          isLoaded={workflow.status === 'loaded'}
-          {publicReleaseStatus}
-          observedEventCounts={workflow.loaded_file.observed_event_counts}
-          blocks={workflow.observations.transcript_blocks}
-          references={workflow.observations.referenced_conversations}
-          {collapsedBlocks}
-          onToggleBlock={toggleTranscriptBlock}
-        />
       {:else}
-        <ChatTranscript
-          theme={selectedTheme as 'DM Style' | 'DM Style (Dark)'}
-          isLoaded={workflow.status === 'loaded'}
+        <TranscriptViewer
+          theme={selectedTheme}
+          isLoaded={workflow.loaded_file.metadata !== null}
           {publicReleaseStatus}
           observedEventCounts={workflow.loaded_file.observed_event_counts}
           blocks={workflow.observations.transcript_blocks}
           references={workflow.observations.referenced_conversations}
           {collapsedBlocks}
           onToggleBlock={toggleTranscriptBlock}
+          {collectedBlocks}
+          onToggleCollection={toggleCollection}
         />
       {/if}
     </article>
@@ -434,4 +455,10 @@
     onTop={scrollPageToTop}
     onRefresh={loadSelectedJsonl}
   />
+  {/snippet}
+  {#snippet panel()}
+    <CollectionPanel items={collection.items} theme={selectedTheme}
+      onClear={() => { collection = clearCollection(collection) }} />
+  {/snippet}
+  </AppLayout>
 </main>
