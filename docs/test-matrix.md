@@ -93,8 +93,8 @@ boundaries remain separate from automated verification.
 | Check | Coverage | Notes |
 | --- | --- | --- |
 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify.ps1` | Complete frontend, backend, and desktop automated verification | Runs the full sequence below and stops at the first failing step. It does not install dependencies, package a portable ZIP, or launch the application. |
-| `npm test` | Frontend workflow, semantic AST, safe DOM construction, transcript capture, and update-check unit behavior | Node-only; no installed browser is required. |
-| `npm run test:browser` | Real client DOM, attachment lifecycle, link handling, technical blocks, four themes, and collapse/expand | Requires installed Chrome/Edge/Chromium. Uses an isolated headless profile and localhost test server. |
+| `npm test` | Frontend workflow, Collection identity/order/lifecycle/serialization, semantic AST, safe DOM construction, transcript capture, and update-check unit behavior | Node-only; no installed browser is required. |
+| `npm run test:browser` | Real client DOM, attachment lifecycle, Refresh retention, links, four themes, collapse/expand, Collection headers/copy/clear, notice layout, and Top/Bottom scrolling | Requires installed Chrome/Edge/Chromium. Uses an isolated headless profile and localhost test server. Clipboard behavior is stubbed; Windows clipboard checks remain manual. |
 | `npm run check` | Svelte and TypeScript static validation | Does not run frontend or Rust tests. |
 | `npm run build` | Production frontend bundle | Also runs automatically before a Tauri build. |
 | `cargo test --manifest-path backend/Cargo.toml` | Parser, inspection, session routing, domain, API, and Worklog behavior | This is the primary Observatory Core test suite. |
@@ -114,11 +114,13 @@ combine their requirements.
 | Documentation only | Inspect the rendered Markdown, links, paths, and commands; confirm `git diff --check` | Run referenced commands when the documentation changes their contract or expected output. |
 | Frontend state, load workflow, filters, or update check | `npm test`; `npm run check`; `npm run build` | `npm run tauri:dev` for interaction or platform behavior. |
 | Transcript rendering, themes, collapse, or capture | `npm test`; `npm run test:browser`; `npm run check`; `npm run build` | Manually inspect each affected presentation and relevant filtered/collapsed states in `npm run tauri:dev`. |
+| Collection state, panel, or toolbar navigation | `npm test`; `npm run test:browser`; `npm run check`; `npm run build` | Inspect all four themes, narrow/maximized windows, native clipboard contents, source order, Refresh preservation, and file-change reset in Tauri. |
 | Backend parser, transport decoding, inspection, domain, or session routing | `cargo test --manifest-path backend/Cargo.toml` | Add `npm test` and a desktop smoke check when transported data or visible behavior changes. |
 | Backend API or Worklog export | `cargo test --manifest-path backend/Cargo.toml` | Run the applicable frontend checks when DTOs or UI-visible behavior change; manually inspect generated Worklog output when export structure changes. |
 | Tauri commands or desktop bridge | `cargo test --manifest-path frontend/src-tauri/Cargo.toml`; `npm run check`; `npm run build` | Run backend tests when backend contracts change; use `npm run tauri:dev` for command integration. |
 | Tauri capabilities, configuration, icons, or desktop integration | `npm run check`; `npm run tauri:build -- --no-bundle` | Exercise the affected permission or platform behavior in the built application. |
 | Dependency or lockfile changes | Tests and builds for every affected package | Use `npm ci` in a clean dependency state when npm resolution changes. Review both direct and transitive dependency changes. |
+| Application version metadata | Full `verify.ps1`; compare npm/Cargo manifest and local-package lockfile versions with Tauri config | Inspect Windows executable FileVersion/ProductVersion. Portable archive naming reads Tauri config; package only in an explicitly approved packaging task. |
 | Portable packaging or release behavior | `npm run tauri:build -- --no-bundle`; `build-and-run.bat` | Inspect the ZIP contents, versioned archive name, bundled README and license, and application startup. Release publication remains a separate approved Git/release action. |
 
 ## Full Verification
@@ -166,6 +168,19 @@ platform behavior. Manual verification is expected when a change affects:
 
 Use only sanitized sample data for repository fixtures. Real Codex logs remain
 outside version control and must not be exposed in verification reports.
+
+For Collection, select C, A, B and verify A, B, C in the panel and actual Windows
+clipboard, using source order rather than timestamps. Remove and re-add B;
+check uniqueness, local header times, raw fences, line breaks, and indentation.
+Copy All retains selection; Clear removes all selection indicators. Filters,
+themes, and Refresh preserve the collection and panel state; another JSONL
+clears it and closes the panel. Confirm Capture and Worklog remain independent.
+
+For toolbar scrolling, assert the actual page destination rather than elapsed
+animation time. The browser test observes the destination on consecutive
+frames with a bounded timeout, covers a late rendering frame, and checks both
+animated and reduced-motion Top/Bottom actions. Also inspect the icon alignment
+and Resume Command notice space as status text appears and clears.
 
 ## Verification Reporting
 

@@ -104,6 +104,23 @@ For an ordinary session, the backend first inspects the stream for session ident
 
 Specialized sessions stop at their specialized routing boundary instead of entering the ordinary transcript parser. Parent-session lookup independently verifies candidate files by inspected thread identity.
 
+### Human requests and transport context
+
+JSONL `role=user` payloads can combine human text with ChatGPT-to-Work handoff
+metadata, delegated tasks, and runtime context. The parser recognizes confirmed
+envelopes conservatively. A delegated `Continuing from ...` task is suppressed
+only when its title and `chatgpt-conversation://` ID exactly match the parsed
+reference metadata. For a confirmed `ambient-ui-state` envelope, only text
+after `## My request:` becomes a human request. Unrecognized or incomplete
+structures retain the original text. Structured question replies become human
+answers in their supplied order; canonical questions remain Codex observations.
+
+Referenced conversation title and ID appear once as provenance. The bounded
+`priorConversation` preview cache is not repeated in the transcript or Worklog;
+the export index records preview availability. Recognized delegated tasks and
+ambient context do not become Worklog request units. Parsing never rewrites
+the source JSONL.
+
 Avoid decorative names that hide purpose.
 
 ---
@@ -120,6 +137,7 @@ It should handle:
 * view mode controls
 * collapse/expand interaction
 * transcript capture and refresh actions
+* source-ordered Collection selection, panel state, and clipboard copy
 * Worklog export action UI
 * specialized-session presentation and parent navigation
 * user-visible status and error display
@@ -130,6 +148,7 @@ Current responsibility-oriented component areas include:
 ```text
 frontend/src/lib/control-room/
 frontend/src/lib/rendering/
+frontend/src/lib/collection/
 frontend/src/lib/load-workflow.ts
 frontend/src/lib/parse-contract.ts
 frontend/src/lib/specialized-session.ts
@@ -138,6 +157,24 @@ frontend/src/lib/specialized-session.ts
 The frontend retains the complete loaded transcript block set and projects role filters locally. Renderers receive the projected blocks plus explicit collapse state; filter and theme changes do not trigger an additional keyed remount of the transcript container. Transcript capture is a data-based serialization of the current theme, projected blocks, references, event summary, and collapse state rather than a readback from DOM text.
 
 Filter semantics are shared across the backend domain, transport projection, and frontend projection. `You` includes only human-visible `You` observations. `Meta` includes `Context`, `Task`, and `System` observations. Tool calls and tool results remain independently selectable.
+
+User/Codex message bodies share Markdown semantics and a static DOM constructor
+across all four themes; technical and metadata bodies remain plain text.
+Unchanged message attachments survive Refresh without replacing their DOM.
+
+Collection holds read-only snapshots of parsed messages and sorts by position
+in the unfiltered transcript. The same sorted items feed the panel and Copy All.
+It preserves raw parsed text rather than rendering Markdown, and shares local
+timestamp formatting with Transcript. Refresh, filters, and themes preserve
+selection; selecting another JSONL or resetting the session clears selection
+and closes the panel. This in-memory workspace is independent of filtered
+Transcript capture and full-session backend Worklog export.
+
+`AppLayout.svelte` owns the current Transcript and Collection columns;
+`TranscriptViewer.svelte` selects a renderer. A future left Session Navigator
+can be added beside these columns, but is not currently implemented. Detailed
+frontend contracts and source-build instructions are in
+[frontend/README.md](../frontend/README.md).
 
 ---
 

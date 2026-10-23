@@ -4,56 +4,65 @@
 
 **언어:** [English](README.md) | 한국어
 
-Codex Session Observatory는 Codex 세션 JSONL 파일을 읽고 버전 관리가 가능한 작업 로그 번들을 내보내는 로컬 데스크톱 도구입니다. Codex CLI와 Codex Windows 앱에서 생성된 세션을 지원하며, Rust, Svelte, Tauri로 구축되어 모든 세션 데이터를 로컬에서 처리합니다.
+Codex Session Observatory는 Codex CLI와 Codex Windows 앱의 세션 JSONL 파일을 읽는 Windows 데스크톱 앱입니다. 대화 기록을 열람하고, 현재 화면의 텍스트를 캡처하고, 선택한 메시지를 모으거나 전체 세션을 구조화된 작업 로그로 내보낼 수 있습니다. 세션 파일은 로컬에서 처리하며 원본을 변경하지 않습니다.
 
-대화 기록을 읽거나, 필터링된 대화 내용을 텍스트로 캡처하거나, 전체 세션을 프로젝트 작업 공간·문서·내부 아카이브·저장소에 함께 보관할 수 있는 구조화된 파일로 변환할 때 사용할 수 있습니다.
+## 시작하기
 
-## 계보 및 릴리스 상태
+1. [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases/latest)에서 Windows 포터블 ZIP을 내려받습니다.
+2. 압축을 풀고 `codex-session-observatory.exe`를 실행합니다.
+3. **Select JSONL**을 클릭해 세션 파일을 선택합니다.
 
-Codex Session Observatory는 이 제품 계보의 이전 도구인 [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer)를 잇는 2세대 앱입니다. Codex 세션 JSONL 파일을 읽는다는 동일한 목적을 유지하면서, 전체 작업 흐름을 Rust/Svelte/Tauri 기반의 로컬 데스크톱 앱으로 다시 구축했습니다.
-
-Windows 포터블 ZIP을 내려받아 압축을 풀고 앱을 실행하면 됩니다. 별도의 서버 설정, 클라우드 계정, 개발 환경은 필요하지 않습니다.
+압축 파일에는 앱, `LICENSE`, 영문·한글 안내를 담은 `README.txt`가 포함됩니다.
 
 ## 주요 기능
 
-- **Select JSONL** 파일 선택기로 Codex CLI나 Codex Windows 앱의 세션 JSONL 파일을 엽니다.
-- 파싱된 대화 블록을 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)** 중 원하는 테마로 읽습니다.
-- You, Codex, 도구 호출, 도구 결과, 메타데이터 필터로 원하는 대화 내용에 집중합니다.
-- 사람이 작성한 요청과 확인된 ChatGPT→Work handoff 데이터 및 자동 주입된 ambient UI context를 구분합니다.
-- cached preview를 대화에 반복하지 않고 참조한 ChatGPT conversation의 title과 conversation ID를 provenance로 표시합니다.
-- Guardian review session을 내부 specialized session으로 식별하고, 검증된 thread ID로 로컬 parent session을 엽니다.
-- **Capture Transcript**로 현재 필터와 테마가 적용된 대화 내용을 클립보드 텍스트로 캡처합니다.
-- 상단 컨트롤이나 대화 내용 아래의 작업 버튼에서 선택한 세션을 새로고침합니다.
-- **Copy Resume Command**로 감지된 `codex resume <session-id>` 명령을 복사합니다.
-- **Visit Cosmic Horizon**으로 관련 [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon)를 엽니다.
-- 더 새로운 공개 버전이 있으면 초기 화면에 GitHub Releases 링크와 함께 업데이트 안내를 표시합니다.
-- **Export Worklog**로 전체 세션을 버전 관리 가능한 작업 로그 번들로 내보냅니다.
+| 기능 | 동작 | 결과 |
+| --- | --- | --- |
+| Transcript | 테마, 역할 필터, 메시지 접기·펼치기로 세션을 읽습니다 | 화면의 대화 기록 |
+| Capture Transcript | 현재 필터·테마·접기 상태를 반영한 대화 내용을 복사합니다 | 클립보드 텍스트 |
+| Collection | 선택한 메시지를 원본 대화의 출현 순서대로 모읍니다 | **Copy All**로 클립보드 복사 |
+| Export Worklog | 필터나 Collection 선택과 관계없이 전체 세션을 내보냅니다 | 구조화된 로컬 파일 |
 
-## 세션 읽기
+네 기능은 서로 독립적으로 동작합니다. 메시지를 수집해도 대화 기록이나 Capture Transcript·Export Worklog에 사용되는 내용은 바뀌지 않습니다.
 
-**Select JSONL**을 사용해 Codex CLI 또는 Codex Windows 앱의 세션 JSONL 파일을 선택합니다. 선택한 경로는 읽기 전용으로 표시되며, **Refresh**는 현재 선택한 파일을 디스크에서 다시 읽습니다.
+## 대화 기록 읽기
 
-기본 대화 영역은 파싱된 블록을 선택한 읽기 테마로 표시합니다. 역할 필터는 원본 세션을 변경하지 않고 이 영역에 표시되는 내용만 바꿉니다. **Capture Transcript**는 필터링된 블록을 포함해 현재 대화 영역에 표시된 텍스트를 복사합니다. 대화 영역 아래의 두 번째 **Refresh** 버튼을 사용하면 화면 상단으로 다시 스크롤하지 않아도 선택한 세션을 다시 불러올 수 있습니다. **loaded** 상태를 클릭하면 선택한 세션을 비우고 앱을 초기 idle 상태로 되돌립니다.
+**Theme**에서 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)** 중 원하는 테마를 선택합니다. 네 테마는 모두 사용자와 Codex 메시지에 강조, 목록, 링크, 코드 블록, 표 등의 공통 Markdown 표현을 적용합니다. 도구 호출·도구 결과·메타데이터는 일반 텍스트로 표시합니다.
 
-세션 ID를 확인할 수 있으면 **Copy Resume Command**가 해당 Codex CLI 재개 명령을 클립보드에 복사합니다.
+**You**, **Codex**, **Tool calls**, **Tool results**, **Meta**로 표시할 역할을 선택합니다. 메시지 헤더를 클릭하면 본문을 접거나 펼칩니다. 메시지의 시간이 있으면 `YYYY-MM-DD HH:mm:ss` 형식의 로컬 시간으로 표시합니다.
 
-Observatory는 시작할 때 공개 GitHub Releases API에 인증 없는 요청을 한 번 보내 최신 공개 릴리스와 실행 중인 앱 버전을 비교합니다. 더 새로운 공개 릴리스가 있으면 다운로드 링크를 표시하고, 실행 버전이 최신 공개 릴리스와 정확히 같으면 최신 버전임을 안내하며, 인식 가능한 실행 버전이 최신 공개 릴리스보다 높으면 미공개 개발 버전임을 안내합니다. 세션 내용, 선택한 경로, 세션 식별자는 전송하지 않습니다. 확인할 수 없거나 버전 형식을 인식할 수 없으면 릴리스 상태를 표시하지 않고 기존 작업을 계속합니다.
+- **Refresh**는 선택한 파일을 다시 읽습니다. 불러오는 동안 현재 대화가 유지되며, 새로고침에 실패해도 기존 대화를 볼 수 있습니다.
+- Collection 토글 오른쪽의 아래쪽 화살표는 **Scroll to Bottom**입니다. 대화 아래의 **Top**은 화면 상단으로 이동합니다.
+- 세션 ID가 있으면 **Copy Resume Command**로 `codex resume <session-id>`를 복사합니다.
+- **loaded** 상태를 클릭하면 불러온 세션을 비우고 초기 화면으로 돌아갑니다.
 
-### 사용자 요청과 주입된 context
+참조한 ChatGPT 대화는 제목과 conversation ID로 표시합니다. 식별된 자동 제공 문맥은 사람이 작성한 요청과 구분합니다. Guardian review 세션은 전용 화면으로 표시하며, 부모 세션을 로컬에서 찾으면 **Open Parent Session**을 제공합니다. 이 검토 세션에서는 재개 명령과 Worklog 내보내기를 제공하지 않습니다.
 
-JSONL에서 `role=user`인 payload가 항상 사람이 직접 입력한 문장을 뜻하지는 않습니다. ChatGPT→Work session에서는 참조 conversation metadata, 자동 생성된 delegated task, 브라우저나 runtime이 공급한 context가 같은 role에 함께 들어갈 수 있습니다.
+## Capture Transcript
 
-Observatory는 실제로 확인된 transport envelope만 보수적으로 식별합니다. `Continuing from ...` delegated task는 title과 `chatgpt-conversation://` ID가 파싱된 reference metadata와 정확히 일치할 때만 숨깁니다. 확인된 `ambient-ui-state` envelope에서는 `## My request:` 뒤의 텍스트만 `[YOU]`로 표시합니다. 알 수 없거나 불완전한 구조는 삭제하지 않고 원문 표시로 fallback합니다.
+대화 아래의 **Capture Transcript**를 클릭하면 대화의 텍스트 표현을 클립보드에 복사합니다. 현재 역할 필터, 테마, 메시지 접기 상태를 반영하며, 접힌 메시지는 헤더만 포함합니다. Markdown 내용은 읽을 수 있는 텍스트로 복사합니다.
 
-참조한 ChatGPT conversation은 title과 conversation ID를 가진 session provenance로 한 번만 표시합니다. bounded `priorConversation` cache는 기본 대화 화면에 다시 노출하지 않습니다. 원본 JSONL 파일은 절대 수정하지 않습니다.
+Collection에서 선택한 메시지는 캡처에 영향을 주지 않습니다.
 
-### Specialized session
+## 메시지 수집하기
 
-Guardian review rollout은 일반 `[YOU]`/`[CODEX]` 대화가 아니라 내부 specialized session으로 표시합니다. Guardian child session에는 Resume과 Worklog 내보내기를 제공하지 않습니다. 검증된 parent thread ID를 로컬 Codex session 저장소에서 찾으면 **Open Parent Session**으로 기존 session workflow를 통해 해당 rollout을 열고, 찾지 못하면 parent가 로컬에 없다는 상태를 명확히 표시합니다.
+1. 메시지 시간 옆의 **+**를 클릭해 Collection에 담습니다. 아이콘이 **✓**로 바뀌며, 다시 클릭하면 해당 메시지를 제외합니다.
+2. Collection Panel에서 선택한 메시지를 확인합니다. 첫 메시지를 담으면 패널이 자동으로 펼쳐집니다.
+3. **Copy All**로 수집한 메시지를 복사합니다. **Clear**는 모든 선택을 비웁니다.
 
-## 작업 로그 내보내기
+패널은 처음에 접혀 있습니다. **Theme** 바로 오른쪽의 Collection 아이콘으로 패널을 펼치거나 접습니다. 툴팁은 **Show Collection** 또는 **Hide Collection**입니다.
 
-**Export Worklog**는 작업의 출발점이 된 요청별로 세션을 구성한 폴더 번들을 만듭니다. 내보낼 상위 디렉터리를 선택하면 앱이 다음 구조로 번들을 생성합니다.
+Collection은 필터 적용 전 원본 대화에서 메시지가 출현한 순서를 유지합니다. 선택한 시점이나 타임스탬프로 정렬하지 않습니다. 같은 메시지는 한 번만 담기며, 제외했다가 다시 담아도 원래 위치로 돌아옵니다. 패널과 **Copy All**의 순서는 같습니다.
+
+패널은 읽기 전용입니다. Markdown을 시각적으로 렌더링하는 대신, 파싱된 메시지의 Markdown 기호·코드 fence·줄바꿈·들여쓰기를 보존한 원문 텍스트를 표시합니다. `[YOU]`, `[CODEX]`, `[TOOL]` 같은 역할 헤더와 로컬 시간은 패널과 복사 결과에 함께 포함됩니다.
+
+필터나 테마를 바꿔도 수집 상태를 유지합니다. **Refresh**는 수집 내용·순서·선택 표시·패널 접기 상태를 유지합니다. 패널을 접거나 **Copy All**을 사용해도 선택은 남습니다. 다른 JSONL을 불러오거나 불러온 세션을 초기화하면 수집 내용이 초기화되고 패널이 접힙니다. 앱을 닫아도 수집 내용이 초기화됩니다. 수집 내용은 앱의 현재 세션 동안 유지됩니다.
+
+## Export Worklog
+
+**Export Worklog**를 클릭하고 상위 폴더를 선택합니다. 현재 역할 필터, 메시지 접기 상태, Collection 선택과 관계없이 전체 세션을 내보냅니다.
+
+각 사용자 요청이 하나의 작업 단위를 시작하며, 다음 요청 전까지의 Codex 응답과 도구 활동을 함께 묶습니다. 생성되는 번들의 구조는 다음과 같습니다.
 
 ```text
 <selected-parent>/
@@ -67,48 +76,14 @@ Guardian review rollout은 일반 `[YOU]`/`[CODEX]` 대화가 아니라 내부 s
          └─ manifest.json
 ```
 
-사람이 작성한 각 `[YOU]` 블록은 하나의 작업 단위를 시작합니다. 이후의 Codex/assistant 응답, 도구 호출, 도구 결과, 보고 메시지는 다음 `[YOU]` 블록이 나타날 때까지 같은 작업 단위에 포함됩니다. 확인된 delegated handoff task와 ambient UI context는 작업 단위 요청이 되지 않습니다. 참조 conversation의 title, conversation ID, preview availability 상태는 `000_index.md`에 기록하지만 cached preview message는 내보내지 않습니다. `manifest.json`은 생성된 번들을 기록해 안전하고 호환되는 갱신을 지원합니다.
+`000_index.md`에는 세션 색인과 참조 대화 정보를, 번호가 붙은 Markdown 파일에는 작업 단위를 담습니다. `manifest.json`은 생성 파일을 기록하며, 같은 호환 번들을 다시 내보내면 해당 파일을 갱신합니다. 디렉터리와 파일 이름에는 로컬 시간을 사용하고, 원본 타임스탬프가 있으면 생성된 내용과 메타데이터에 유지합니다.
 
-내보내기는 현재 필터링된 대화 화면이 아니라 항상 전체 원본 세션을 사용합니다. 같은 세션에서 만든 호환 가능한 번들을 다시 내보내면 `manifest.json`을 기준으로 생성 파일을 갱신합니다. 내보내기에 성공하면 운영 체제의 파일 탐색기에서 생성된 번들 폴더를 엽니다.
+내보내기가 끝나면 파일 탐색기에서 번들 폴더를 엽니다.
 
-디렉터리와 파일 이름에는 사용자에게 표시되는 로컬 시간이 사용됩니다. 원본 타임스탬프가 있으면 생성된 콘텐츠와 메타데이터에 그대로 유지됩니다.
+## 앱 정보
 
-> 내보낸 작업 로그에는 프롬프트, 로컬 경로, 명령 출력, 코드 조각, 프로젝트별 정보가 포함될 수 있습니다. 공유하기 전에 번들 내용을 검토하세요.
+앱은 시작할 때 GitHub Releases를 확인하고 실행 버전이 최신인지, 새 공개 릴리스가 있는지, 미공개 개발 버전인지 안내합니다.
 
-## Windows에서 빌드 및 실행
+**Visit Cosmic Horizon**은 관련 [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon)를 엽니다.
 
-Windows에서 소스 코드를 직접 빌드하려면 npm이 포함된 Node.js와 Rust stable toolchain을 설치합니다. 새로 받은 저장소에서는 먼저 `frontend/`에서 잠긴 프런트엔드 의존성을 설치합니다.
-
-```text
-npm ci
-```
-
-그런 다음 저장소 루트에서 `build-and-run.bat`을 더블클릭하거나 다음 명령을 실행합니다.
-
-```text
-build-and-run.bat
-```
-
-이 스크립트는 설치 프로그램을 만들지 않고 release 애플리케이션을 빌드하고 다음 포터블 압축 파일을 생성한 뒤 앱을 시작합니다.
-
-```text
-release\Codex-Session-Observatory_<version>_windows-x64-portable.zip
-```
-
-압축 파일에는 `codex-session-observatory.exe`, `LICENSE`, 영문·한국어가 함께 수록된 `README.txt`가 포함됩니다. 빌드된 앱은 다음 경로에서 시작됩니다.
-
-```text
-frontend\src-tauri\target\release\codex-session-observatory.exe
-```
-
-## 실행 환경 및 개발
-
-이 애플리케이션은 Tauri 데스크톱 셸 안에서 Svelte 프런트엔드를 사용합니다. Tauri는 로컬 JSONL 처리를 위해 Rust 파서와 내보내기 계층을 직접 호출합니다.
-
-대화형 데스크톱 개발 실행은 `frontend/`에서 다음 명령을 사용합니다.
-
-```text
-npm run tauri:dev
-```
-
-자동 테스트, 정적 검사, 프로덕션 빌드, Rust 패키지 테스트, 데스크톱 빌드 검증과 변경 범위별 요구 사항은 [검증 매트릭스](docs/test-matrix.md)를 따릅니다.
+Codex Session Observatory는 [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer)를 이어 Rust, Svelte, Tauri로 다시 구축한 데스크톱 앱입니다. 소스 빌드 방법은 [개발 안내](frontend/README.md), 자동 검증 절차는 [검증 매트릭스](docs/test-matrix.md)에 정리되어 있습니다.
