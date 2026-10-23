@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
-    "test": "node --experimental-strip-types --test tests/load-workflow.test.ts tests/transcript-rendering.test.ts tests/update-check.test.ts tests/message-semantics.test.ts tests/external-links.test.ts tests/message-dom.test.ts",
+    "test": "node --experimental-strip-types --test tests/load-workflow.test.ts tests/collection-state.test.ts tests/transcript-rendering.test.ts tests/update-check.test.ts tests/message-semantics.test.ts tests/external-links.test.ts tests/message-dom.test.ts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

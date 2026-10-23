@@ -25,3 +25,11 @@ test('App retains transcript through refresh, append and failure while preservin
   try { await refreshHarness.evaluate('globalThis.__refreshCase()') }
   finally { await refreshHarness.close() }
 })
+
+test('Collection toolbar, notice layout, headers and page navigation preserve their contracts', { timeout: 60000 }, async () => {
+  const collectionHarness = await startClientHarness({
+    entry: fileURLToPath(new URL('./helpers/collection-ui-client.ts', import.meta.url)).replaceAll('\\', '/'),
+  })
+  try { await collectionHarness.evaluate('globalThis.__collectionUiCase()') }
+  finally { await collectionHarness.close() }
+})

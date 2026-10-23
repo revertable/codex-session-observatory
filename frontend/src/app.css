@@ -274,7 +274,8 @@ code {
 .resume-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr) auto;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 0;
   align-items: center;
   margin-top: 7px;
   border-top: 1px solid var(--border);
@@ -314,11 +315,15 @@ code {
 .action-status {
   grid-column: 2 / -1;
   justify-self: end;
-  min-height: 18px;
   color: var(--muted);
   font-size: 12px;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.action-status:not(:empty) {
+  min-height: 18px;
+  margin-top: 8px;
 }
 
 .filter-bar {
@@ -372,11 +377,18 @@ code {
   margin: 0;
 }
 
+.view-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .theme-selector {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-left: auto;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
@@ -409,6 +421,171 @@ code {
 
 .terminal-section {
   margin-top: 12px;
+}
+
+.collection-panel-toggle,
+.toolbar-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.collection-panel-toggle:hover,
+.collection-panel-toggle.active,
+.toolbar-icon-button:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.collection-panel-toggle:focus-visible,
+.toolbar-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.observatory-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.observatory-workspace.collection-open {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 32%);
+}
+
+.workspace-transcript,
+.workspace-collection {
+  min-width: 0;
+}
+
+.workspace-collection {
+  position: sticky;
+  top: 12px;
+  margin-top: 12px;
+}
+
+.workspace-collection[hidden] {
+  display: none;
+}
+
+.collection-panel {
+  --collection-bg: var(--panel);
+  --collection-text: var(--text);
+  --collection-border: var(--border);
+  max-height: calc(100svh - 24px);
+  overflow: auto;
+  border: 1px solid var(--collection-border);
+  border-radius: 6px;
+  color: var(--collection-text);
+  background: var(--collection-bg);
+}
+
+.collection-panel[data-theme='Terminal Style'],
+.collection-panel[data-theme='DM Style (Dark)'] {
+  --collection-bg: #1b1d23;
+  --collection-text: #e6e6e6;
+  --collection-border: #464b56;
+}
+
+.collection-panel[data-theme='Markdown Style'] {
+  --collection-bg: #fffdf8;
+  --collection-text: #3b3329;
+  --collection-border: #d8cdbb;
+}
+
+.collection-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px;
+  border-bottom: 1px solid var(--collection-border);
+  background: var(--collection-bg);
+}
+
+.collection-panel-header h2 {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.collection-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-self: end;
+  gap: 6px;
+}
+
+.collection-actions button {
+  white-space: nowrap;
+}
+
+.collection-copy-status {
+  grid-column: 1 / -1;
+}
+
+.collection-copy-status,
+.collection-empty {
+  font-size: 13px;
+}
+
+.collection-copy-status:not(:empty) {
+  margin-top: 8px;
+}
+
+.collection-empty {
+  padding: 16px;
+}
+
+.collection-messages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collection-message {
+  padding: 14px;
+  border-bottom: 1px solid var(--collection-border);
+}
+
+.collection-message header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.collection-timestamp {
+  overflow-wrap: anywhere;
+  opacity: 0.8;
+}
+
+.collection-message pre {
+  margin: 10px 0 0;
+  font: 13px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+@media (max-width: 760px) {
+  .observatory-workspace.collection-open {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 40%);
+    gap: 8px;
+  }
 }
 
 .specialized-session {
@@ -608,9 +785,14 @@ dd {
     gap: 6px;
   }
 
-  .theme-selector {
+  .view-controls {
     width: 100%;
     margin-left: 0;
+  }
+
+  .theme-selector {
+    flex: 1;
+    min-width: 0;
   }
 
   .theme-selector select {
