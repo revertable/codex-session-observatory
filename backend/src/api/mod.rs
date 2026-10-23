@@ -224,7 +224,8 @@ pub fn parse_for_transport(request: ParseBoundaryRequest) -> ApiResult<ParseResp
 }
 
 pub fn parse_selected_file(request: ParseRequestDto) -> ApiResult<ParseResponseDto> {
-    let path = PathBuf::from(&request.path);
+    let path = session::source::resolve_path(Path::new(&request.path))
+        .map_err(ErrorResponseDto::from_io)?;
     let loaded = session::load_file(&path).map_err(ErrorResponseDto::from_io)?;
     let route_capabilities = loaded.descriptor.capabilities();
     let mut source = LoadedFileMetadataDto::from_path(&path).map_err(ErrorResponseDto::from_io)?;
@@ -249,7 +250,8 @@ pub fn locate_parent_session_for_transport(
     request: LocateParentSessionRequestDto,
 ) -> ApiResult<LocateParentSessionResponseDto> {
     let current_path = PathBuf::from(&request.current_path);
-    let current_file = fs::File::open(&current_path).map_err(ErrorResponseDto::from_io)?;
+    let current_file =
+        session::source::open_reader(&current_path).map_err(ErrorResponseDto::from_io)?;
     let inspection = inspect_reader(current_file).map_err(ErrorResponseDto::from_io)?;
     let observed_parent_thread_id = inspection
         .identity

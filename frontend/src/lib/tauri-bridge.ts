@@ -23,7 +23,7 @@ export async function selectJsonlPath(): Promise<string | null> {
     filters: [
       {
         name: 'Codex JSONL',
-        extensions: ['jsonl'],
+        extensions: ['jsonl', 'jsonl.zst'],
       },
     ],
   })

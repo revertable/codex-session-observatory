@@ -108,12 +108,16 @@ fn export_worklog_at(
     export_time: OffsetDateTime,
     naming_offset: NamingOffsetResolver,
 ) -> Result<ExportWorklogResult, ExportWorklogError> {
-    if !request.source_path.is_file() {
-        return Err(ExportWorklogError {
+    let source_path = session::source::resolve_path(&request.source_path).map_err(|error| {
+        ExportWorklogError {
             code: "invalid_source_file",
-            message: "The loaded JSONL source file is no longer available.".to_owned(),
-        });
-    }
+            message: format!("The loaded JSONL source file is unavailable: {error}"),
+        }
+    })?;
+    let request = ExportWorklogRequest {
+        source_path,
+        ..request
+    };
     if !request.parent_directory.is_dir() {
         return Err(ExportWorklogError {
             code: "invalid_export_parent",
@@ -771,6 +775,69 @@ mod tests {
             OffsetDateTime::parse("2026-06-22T10:00:00Z", &Rfc3339).expect("time"),
             utc_offset,
         )
+    }
+
+    #[test]
+    fn compressed_export_matches_plain_and_refreshes_after_representation_changes() {
+        let root = test_root("compressed-equivalence");
+        let first = export_fixture(&root, true).expect("plain export");
+        let expected = first
+            .generated_files
+            .iter()
+            .map(|name| {
+                (
+                    name.clone(),
+                    fs::read_to_string(Path::new(&first.bundle_path).join(name)).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let plain = root.join("11111111-2222-3333-4444-555555555555.jsonl");
+        let packed = plain.with_extension("jsonl.zst");
+        let bytes = zstd::stream::encode_all(sample_jsonl(true).as_bytes(), 3).unwrap();
+        fs::write(&packed, &bytes).unwrap();
+        fs::remove_file(&plain).unwrap();
+        let before = fs::metadata(&packed).unwrap();
+        let result = export_worklog_at(
+            ExportWorklogRequest {
+                source_path: plain.clone(),
+                parent_directory: root.clone(),
+            },
+            OffsetDateTime::parse("2026-06-22T10:00:00Z", &Rfc3339).unwrap(),
+            utc_offset,
+        )
+        .unwrap();
+        assert!(result.refreshed);
+        assert_eq!(first.bundle_path, result.bundle_path);
+        for (name, expected) in expected {
+            let actual = fs::read_to_string(Path::new(&result.bundle_path).join(name)).unwrap();
+            // Only source provenance differs between the physical formats.
+            assert_eq!(actual.replace(".jsonl.zst", ".jsonl"), expected);
+        }
+        assert_eq!(fs::read(&packed).unwrap(), bytes);
+        assert_eq!(
+            before.modified().unwrap(),
+            fs::metadata(&packed).unwrap().modified().unwrap()
+        );
+        assert_eq!(
+            before.created().ok(),
+            fs::metadata(&packed).unwrap().created().ok()
+        );
+        assert!(!plain.exists());
+        fs::write(&plain, sample_jsonl(true)).unwrap();
+        fs::remove_file(&packed).unwrap();
+        assert!(
+            export_worklog_at(
+                ExportWorklogRequest {
+                    source_path: packed,
+                    parent_directory: root.clone()
+                },
+                OffsetDateTime::parse("2026-06-22T10:00:00Z", &Rfc3339).unwrap(),
+                utc_offset
+            )
+            .unwrap()
+            .refreshed
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

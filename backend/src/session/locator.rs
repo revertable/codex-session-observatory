@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::source;
 use crate::inspection::inspect_reader;
 
 const SESSION_STORE_NAMES: [&str; 2] = ["sessions", "archived_sessions"];
@@ -145,12 +146,12 @@ fn scan_directory(
             scan_directory(&entry.path(), parent_thread_id, matches, search_complete);
             continue;
         }
-        if !file_type.is_file() || !has_jsonl_extension(&entry.path()) {
+        if !file_type.is_file() || !source::is_session_file(&entry.path()) {
             continue;
         }
 
         match file_matches_thread_id(&entry.path(), parent_thread_id) {
-            Ok(true) => match fs::canonicalize(entry.path()) {
+            Ok(true) => match source::resolve_path(&entry.path()).and_then(fs::canonicalize) {
                 Ok(path) => {
                     matches.insert(path);
                 }
@@ -162,14 +163,8 @@ fn scan_directory(
     }
 }
 
-fn has_jsonl_extension(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("jsonl"))
-}
-
 fn file_matches_thread_id(path: &Path, parent_thread_id: &str) -> io::Result<bool> {
-    let inspection = inspect_reader(fs::File::open(path)?)?;
+    let inspection = inspect_reader(source::open_reader(path)?)?;
     Ok(inspection
         .identity
         .and_then(|identity| identity.thread_id)

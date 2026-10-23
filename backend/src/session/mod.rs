@@ -1,6 +1,5 @@
 use std::{
-    fs::File,
-    io::{self, Cursor, Seek, SeekFrom},
+    io::{self, Cursor},
     path::Path,
 };
 
@@ -11,6 +10,7 @@ use crate::{
 };
 
 pub mod locator;
+pub mod source;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionRoute {
@@ -101,18 +101,21 @@ impl LoadedSession {
 
 pub fn load_file(path: impl AsRef<Path>) -> io::Result<LoadedSession> {
     let path = path.as_ref();
-    if !path.is_file() {
-        return Ok(load_bytes(&[]));
-    }
-
-    let mut file = File::open(path)?;
-    let descriptor = SessionDescriptor::from(inspect_reader(&mut file)?);
+    let path = source::resolve_path(path)?;
+    let mut reader = source::open_reader(&path)?;
+    let descriptor = SessionDescriptor::from(inspect_reader(&mut reader)?);
     let outcome = match descriptor.route {
-        SessionRoute::OrdinaryTranscript => {
-            file.seek(SeekFrom::Start(0))?;
-            SessionProcessingOutcome::OrdinaryTranscript(parser::parse_reader(file)?)
+        SessionRoute::OrdinaryTranscript => SessionProcessingOutcome::OrdinaryTranscript(
+            parser::parse_reader(source::open_reader(&path)?)?,
+        ),
+        SessionRoute::Specialized(classification) => {
+            // Validate the compressed frame even though specialized sessions do
+            // not enter the ordinary transcript parser.
+            if source::is_compressed(&path) {
+                io::copy(&mut reader, &mut io::sink())?;
+            }
+            process_specialized_session(classification)
         }
-        SessionRoute::Specialized(classification) => process_specialized_session(classification),
     };
 
     Ok(LoadedSession {
