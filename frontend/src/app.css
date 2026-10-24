@@ -432,8 +432,16 @@ code {
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   min-height: 100%;
+  container: transcript / inline-size;
 }
 .transcript-content > * { min-width: 0; min-height: 0; }
+.transcript-presentation,
+.specialized-session {
+  min-width: 0;
+  max-width: 100%;
+  padding: 18px;
+  overflow-wrap: anywhere;
+}
 
 /* Only workspace panel controls participate in the theme control palette. */
 :is(.observatory-workspace, .panel-controls) :is(.panel-icon-button, [data-navigator-mode]) {
@@ -697,7 +705,7 @@ code {
 }
 
 .specialized-session {
-  padding: clamp(28px, 6vw, 72px);
+  padding-block: clamp(28px, 6vw, 72px);
   color: var(--text);
   background: var(--panel);
 }
@@ -716,7 +724,6 @@ code {
 }
 
 .specialized-session-description {
-  max-width: 760px;
   margin-top: 12px;
   color: var(--muted);
   font-size: 15px;
@@ -725,7 +732,6 @@ code {
 .specialized-session-identity {
   display: grid;
   gap: 12px;
-  max-width: 820px;
   margin: 28px 0 0;
 }
 

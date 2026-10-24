@@ -7,6 +7,38 @@ let harness: Awaited<ReturnType<typeof startClientHarness>>
 before(async () => { harness = await startClientHarness() }, { timeout: 60000 })
 after(async () => { await harness?.close() })
 
+test('allocated Transcript width is shared across themes, content states and panel combinations', { timeout: 120000 }, async () => {
+  const app = await startClientHarness({entry:fileURLToPath(new URL('./helpers/navigator-client.ts',import.meta.url)).replaceAll('\\','/')})
+  try {
+    await app.evaluate('globalThis.__widthStart()')
+    for (const state of ['idle','rich','specialized']) {
+      if (state !== 'idle') await app.evaluate(`globalThis.__widthLoad(${state === 'specialized'})`)
+      for (const [width,height] of [[1100,720],[1360,760],[1920,1080]]) {
+        await app.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false})
+        for (const [left,right] of [[true,true],[false,true],[true,false],[false,false]]) {
+          let geometry: string | undefined
+          for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
+            const measured = await app.evaluate(`globalThis.__widthCheck(${JSON.stringify(theme)},${left},${right})`)
+            const actual = JSON.stringify([measured.frame,measured.viewport])
+            if (geometry) assert.equal(actual,geometry,'theme must not change frame or viewport')
+            geometry = actual
+          }
+        }
+      }
+      if (state === 'rich') {
+        await app.evaluate('globalThis.__heightCheck("Terminal Style",true,true)')
+        for (const side of ['Sessions','Collection']) {
+          await app.evaluate(`document.querySelector('[aria-label="Resize ${side}"]').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))`)
+          for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
+            await app.evaluate(`globalThis.__widthCheck(${JSON.stringify(theme)},true,true)`)
+          }
+        }
+      }
+    }
+    await app.evaluate('globalThis.__widthStop()')
+  } finally { await app.close() }
+})
+
 test('compact header and shared status preserve feedback, recovery and workspace height', { timeout: 60000 }, async () => {
   const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\','/') })
   try {

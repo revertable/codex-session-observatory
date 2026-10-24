@@ -3,7 +3,7 @@ import App from '../../src/App.svelte'
 import '../../src/app.css'
 import '../../src/lib/rendering/transcript.css'
 import type { SessionSummary, SessionPage, SessionHierarchy } from '../../src/lib/session-navigator/contract'
-import type { ParseResponseDto } from '../../src/lib/parse-contract'
+import type { ParseResponseDto, TranscriptBlockDto } from '../../src/lib/parse-contract'
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message) }
 const settle = async () => { flushSync(); await tick(); await new Promise(resolve => setTimeout(resolve, 40)); flushSync() }
@@ -30,6 +30,15 @@ const hierarchy = (snapshot: string): SessionHierarchy => ({ snapshot_id: snapsh
   years: [{ year: 2026, months: [{ month: 10, days: [{ day: 23, items: items.slice(0, 42) }] }] }],
   unfiled_items: [items[42]], diagnostics })
 let longMessages = false
+let widthFixture = false
+let specializedFixture = false
+const widthCode = 'const value = "' + 'code'.repeat(180) + '";\n  preserve indentation'
+const widthFence = String.fromCharCode(96).repeat(3)
+const widthBlocks: TranscriptBlockDto[] = [
+  { entry_type:'you',label:'YOU',title:'User',timestamp:null,content:'Short message' },
+  { entry_type:'codex',label:'CODEX',title:'Assistant',timestamp:null,content:'# Width fixture\n\n' + 'A natural paragraph with several words. '.repeat(60) + '\n\n- First item\n- Second item\n\n' + widthFence + 'js\n' + widthCode + '\n' + widthFence + '\n\nhttps://example.com/' + 'long-path'.repeat(100) + '\n\n| Column | Wide value |\n| --- | --- |\n| Cell | ' + 'table-cell'.repeat(70) + ' |' },
+  { entry_type:'tool_result',label:'RESULT',title:'Tool result',timestamp:null,content:'Technical output ' + 'unbroken'.repeat(160) },
+]
 const response = (path: string): ParseResponseDto => ({
   source: { absolute_path: path, file_name: path.split('/').at(-1)!, session_id: null, resume_command: null },
   session: { classification: 'interactive', identity: null, capabilities: { can_show_transcript: true, can_resume: false,
@@ -70,7 +79,13 @@ let cancelExport = false; let failAction = ''; let failExport = false; let failF
     if (command === 'parse_selected_jsonl') {
       parses.push(args.path)
       if (failParse) throw { error: { code: 'read_failed', message: 'Session cannot be read' } }
-      return response(args.path)
+      const result = response(args.path)
+      if (widthFixture) result.parsed_chat_log.transcript_blocks = widthBlocks
+      if (specializedFixture) result.session = { classification:'guardian_review', identity: {
+        thread_id:'synthetic-thread-' + 'x'.repeat(120),session_id:null,parent_thread_id:null,originator:null,thread_source:null,
+        source:{kind:'subagent',value:'guardian'},history_mode:null,subagent_history_start_ordinal:null },
+        capabilities:{can_show_transcript:false,can_resume:false,can_export_worklog:false,can_open_parent_session:false} }
+      return result
     }
     if (command === 'resolve_jsonl_initial_directory') return '/sessions'
     if (command === 'export_worklog') {
@@ -249,6 +264,50 @@ let workspaceList: Element | null
 ;(globalThis as any).__heightStart = async () => {
   workspaceInstance = mount(App, { target }); await settle()
   await click(target.querySelector('[aria-label="Show Collection"]'))
+}
+;(globalThis as any).__widthStart = async () => {
+  await (globalThis as any).__heightStart()
+  widthFixture = true
+}
+;(globalThis as any).__widthLoad = async (specialized = false) => {
+  specializedFixture = specialized
+  await click(row(0))
+  for (const checkbox of target.querySelectorAll<HTMLInputElement>('.filter-bar input')) {
+    if (!checkbox.checked) { checkbox.checked = true; checkbox.dispatchEvent(new Event('change',{bubbles:true})) }
+  }
+  await settle()
+}
+;(globalThis as any).__widthCheck = async (theme: string, left: boolean, right: boolean) => {
+  await (globalThis as any).__heightCheck(theme,left,right)
+  const frame = target.querySelector<HTMLElement>('.workspace-transcript')!
+  const viewport = target.querySelector<HTMLElement>('.transcript-viewport')!
+  const root = viewport.querySelector<HTMLElement>('.transcript-presentation,.specialized-session')!
+  const style = getComputedStyle(root)
+  assert(style.paddingLeft === '18px' && style.paddingRight === '18px', 'all presentations share the horizontal inset')
+  assert(viewport.scrollWidth <= viewport.clientWidth && document.documentElement.scrollWidth <= innerWidth, 'long content never widens viewport or page')
+  const inner = root.clientWidth - 36
+  for (const column of root.querySelectorAll<HTMLElement>('.markdown-document-header,.markdown-blocks,.markdown-notice,.chat-transcript-header,.chat-blocks,.chat-notice,.specialized-session-description,.specialized-session-identity')) {
+    assert(Math.abs(column.getBoundingClientRect().width-inner) < 1, 'content uses full allocated track: ' + column.className)
+  }
+  for (const bubble of root.querySelectorAll<HTMLElement>('.chat-block')) {
+    const narrow = target.querySelector<HTMLElement>('.transcript-content')!.clientWidth <= 680
+    const technical = ['meta','tool','result','unknown'].includes(bubble.dataset.family!)
+    const ratio = narrow ? 0.92 : technical ? 0.82 : 0.72
+    assert(Math.abs(bubble.getBoundingClientRect().width-inner*ratio)<1, 'bubbles scale with the track without a pixel cap')
+  }
+  if (root.querySelector('.message-content')) {
+    assert(root.querySelector('.message-code-block code')?.textContent === widthCode + '\n', 'code source and indentation preserved')
+    assert(root.querySelector('.message-table-scroll'), 'wide Markdown table keeps its own scroll container')
+    for (const table of root.querySelectorAll<HTMLElement>('.message-table-scroll')) {
+      assert(table.scrollWidth > table.clientWidth, 'wide table scrolls locally')
+      assert(table.getBoundingClientRect().right <= viewport.getBoundingClientRect().right, 'table stays inside viewport')
+    }
+  }
+  return {frame:[frame.getBoundingClientRect().x,frame.getBoundingClientRect().width],viewport:[viewport.getBoundingClientRect().x,viewport.getBoundingClientRect().width],track:inner}
+}
+;(globalThis as any).__widthStop = async () => {
+  widthFixture = false; specializedFixture = false
+  await (globalThis as any).__workspaceStop()
 }
 ;(globalThis as any).__heightLoad = async () => {
   await click(row(0)); await click(target.querySelector('[aria-label="Add to Collection"]'))
