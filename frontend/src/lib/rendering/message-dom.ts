@@ -132,6 +132,7 @@ export function mountMessageDom(
 /** One memo per MessageContent; identical source does not replace its subtree. */
 export function createMessageAttachment(
   onLinkStatus: (error: string) => void,
+  openLink: (href: string) => Promise<void> = openExternalLink,
 ): (content: string, semantic: MessageSemantics) => Attachment<HTMLElement> {
   let previousContent: string | undefined
   let previousSemantic: MessageSemantics | undefined
@@ -141,7 +142,7 @@ export function createMessageAttachment(
     previousContent = content
     previousSemantic = semantic
     if (unchanged) return previousAttachment!
-    previousAttachment = host => untrack(() => mountMessageDom(host, semantic.nodes, onLinkStatus))
+    previousAttachment = host => untrack(() => mountMessageDom(host, semantic.nodes, onLinkStatus, openLink))
     return previousAttachment
   }
 }

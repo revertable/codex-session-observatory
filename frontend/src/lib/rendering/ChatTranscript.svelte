@@ -69,9 +69,8 @@
         {#if publicReleaseStatus !== null}
           <p class="empty-version"><UpdateNotice releaseStatus={publicReleaseStatus} presentation="chat" /></p>
         {/if}
-        <p class="empty-selection">Select a local JSONL session to begin.</p>
+        <p class="empty-selection">Select a session from Sessions to begin.</p>
         <p class="empty-metadata chat-empty-metadata">Current theme: {theme}</p>
-        <p class="empty-ready">Ready.</p>
       </div>
     {/if}
   </header>

@@ -10,8 +10,10 @@ let rejectLoad: (error: Error) => void
 let requests = 0
 let selectedPath = 'session.jsonl'
 let requestedPath = ''
+const navigatorPage = () => ({ snapshot_id: 'test', sessions_root: '.', total: 2, items: [selectedPath, 'other-' + selectedPath].map((path, i) => ({entry_key: String(i), thread_id: String(i), path, title: i ? 'Other fixture' : 'Session fixture', title_source: 'database_name', created_at_ms: 1, created_at_source: 'session_meta', last_conversation_at_ms: null, last_conversation_at_source: 'unavailable', storage_date: null, classification: 'interactive', thread_source: 'user'})), next_cursor: null, has_more: false, diagnostics: { discovered_files: 2, guardian_sessions: 0, duplicate_files: 0, unreadable_files: 0, warnings: [] } })
 ;(window as any).__TAURI_INTERNALS__ = {
   invoke: async (command: string, args?: { path?: string }) => {
+    if (command === 'reload_session_navigator') return navigatorPage()
     if (command === 'resolve_jsonl_initial_directory') return '.'
     if (command === 'plugin:dialog|open') return selectedPath
     if (command === 'plugin:app|version') throw new Error('No update check in test')
@@ -24,7 +26,7 @@ let requestedPath = ''
   },
 }
 const click = async (text: string) => {
-  const button = Array.from(target.querySelectorAll('button')).find(button => button.textContent?.trim() === text)
+  const button = Array.from(target.querySelectorAll('button')).find(button => button.textContent?.trim() === text || button.getAttribute('aria-label') === text)
   assert(button && !button.disabled, 'enabled action: ' + text)
   button!.click(); await settle()
 }
@@ -46,7 +48,7 @@ const response: ParseResponseDto = {
   try {
     await settle()
     assert(status() === 'idle' && blocks().length === 0, 'initial idle')
-    await click('Select JSONL')
+    await click('Session fixture')
     assert(status() === 'loading' && requests === 1 && blocks().length === 0, 'initial pending: ' + status())
     rejectLoad(new Error('Test initial failure')); await settle()
     assert(status() === 'error' && blocks().length === 0, 'initial failure has no transcript')
@@ -83,7 +85,7 @@ const response: ParseResponseDto = {
     assert(blocks()[2] === added, 'failure retains appended message')
     await click('Refresh'); resolveLoad(structuredClone(appended)); await settle()
     retained('retry completed'); assert(blocks()[2] === added && status() === 'loaded', 'retry retained')
-    await click('Select JSONL')
+    await click('Other fixture')
     assert(blocks().length === 0 && status() === 'loading', 'new selection resets transcript')
     rejectLoad(new Error('Test selection failure')); await settle()
     assert(blocks().length === 0 && status() === 'error', 'selection failure has no old transcript')
@@ -96,7 +98,7 @@ const response: ParseResponseDto = {
     selectedPath = path
     const instance = mount(App, { target })
     const refreshButtons = () => Array.from(target.querySelectorAll('button'))
-      .filter(button => button.textContent?.trim() === 'Refresh' || button.getAttribute('aria-label') === 'Refresh Transcript')
+      .filter(button => button.getAttribute('aria-label') === 'Refresh' || button.getAttribute('aria-label') === 'Refresh Transcript')
     const panel = () => target.querySelector<HTMLElement>('#collection-panel')!
     const collectionBodies = () => Array.from(panel().querySelectorAll('article pre')).map(node => node.textContent)
     const resolve = async (physicalPath = path) => {
@@ -108,7 +110,7 @@ const response: ParseResponseDto = {
     try {
       await settle()
       assert(refreshButtons().length === 2 && refreshButtons().every(button => button.disabled), 'both Refresh buttons disabled initially')
-      await click('Select JSONL')
+      await click('Session fixture')
       assert(refreshButtons().every(button => !button.disabled), 'both Refresh buttons react to selected path: ' + path)
       await resolve()
       const toggles = target.querySelectorAll<HTMLButtonElement>('.terminal-block .collection-toggle')

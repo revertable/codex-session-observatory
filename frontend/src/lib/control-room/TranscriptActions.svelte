@@ -5,7 +5,6 @@
     status: LoadStatus
     hasSelectedPath: boolean
     canCaptureTranscript: boolean
-    actionStatusMessage: string
     onCapture: () => void | Promise<void>
     onRefresh: () => void | Promise<void>
   }
@@ -14,7 +13,6 @@
     status,
     hasSelectedPath,
     canCaptureTranscript,
-    actionStatusMessage,
     onCapture,
     onRefresh,
   }: Props = $props()
@@ -46,5 +44,4 @@
     </button>
   </div>
   </div>
-  <span class="transcript-action-status" aria-live="polite">{actionStatusMessage}</span>
 </header>

@@ -5,14 +5,12 @@
   interface Props {
     session: SessionDescriptorDto
     isLocatingParent: boolean
-    parentStatusMessage: string
     onOpenParent: () => void | Promise<void>
   }
 
   let {
     session,
     isLocatingParent,
-    parentStatusMessage,
     onOpenParent,
   }: Props = $props()
   const presentation = $derived(presentationForSession(session))
@@ -53,8 +51,6 @@
     <p class="specialized-session-note">
       The parent is located by thread ID. Inherited child history is not reconstructed.
     </p>
-    {#if parentStatusMessage !== ''}
-      <p class="specialized-session-status" aria-live="polite">{parentStatusMessage}</p>
-    {/if}
+
   </div>
 </section>

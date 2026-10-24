@@ -7,6 +7,15 @@ let harness: Awaited<ReturnType<typeof startClientHarness>>
 before(async () => { harness = await startClientHarness() }, { timeout: 60000 })
 after(async () => { await harness?.close() })
 
+test('compact header and shared status preserve feedback, recovery and workspace height', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\','/') })
+  try {
+    await app.send('Emulation.setDeviceMetricsOverride',{width:1360,height:760,deviceScaleFactor:1,mobile:false})
+    await app.send('Emulation.setFocusEmulationEnabled',{enabled:true})
+    await app.evaluate('globalThis.__feedbackCase()')
+  } finally { await app.close() }
+})
+
 test('theme surfaces preserve common geometry, scroll boundaries and panel control palettes', { timeout: 60000 }, async () => {
   const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
   try { await workspace.evaluate('globalThis.__themeSurfaceCase()') }

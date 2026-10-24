@@ -3,6 +3,7 @@
   import { collectionRoleLabel, serializeCollection } from './collection-state'
   import { formatEntryTimestamp } from '../rendering/entry-timestamp'
   import type { TranscriptThemeName } from '../rendering/transcript-themes'
+  import { useStatus } from '../control-room/status-context'
   import PanelScrollActions from '../control-room/PanelScrollActions.svelte'
 
   interface Props {
@@ -11,21 +12,21 @@
     onClear: () => void
   }
   let { items, theme, onClear }: Props = $props()
-  let copyStatus = $state('')
+  const feedback = useStatus()!
   let copying = $state(false)
   let viewport: HTMLDivElement | undefined = $state()
-  $effect(() => { items; copyStatus = '' })
 
   async function copyAll() {
     const snapshot = items
     if (snapshot.length === 0 || copying) return
     copying = true
+    const token = feedback.begin('collection-copy', '', true)
     try {
       if (navigator.clipboard == null) throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(serializeCollection(snapshot))
-      if (items === snapshot) copyStatus = 'Copied.'
+      feedback.finish(token, 'success', items === snapshot ? 'Copied to clipboard.' : '')
     } catch {
-      if (items === snapshot) copyStatus = 'Copy failed.'
+      feedback.finish(token, 'error', items === snapshot ? 'Copy failed.' : '')
     } finally {
       copying = false
     }
@@ -43,7 +44,6 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>
       </button>
     </div>
-    <p role="status" class="collection-copy-status">{copyStatus}</p>
   </header>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable content must be keyboard focusable.) -->
   <div class="collection-body panel-scroll" bind:this={viewport} role="region" tabindex="0" aria-label="Collection items">

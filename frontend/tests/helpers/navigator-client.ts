@@ -42,6 +42,7 @@ const response = (path: string): ParseResponseDto => ({
     ] },
 })
 let reloads = 0; let flatCalls = 0; let hierarchyCalls = 0; const parses: string[] = []
+let reloadErrorMessage = 'Cannot read sessions'
 let failReload = false; let expirePage = false; let failParse = false; let empty = false
 let releasePage: (() => void) | null = null; let holdPage = false
 let releaseReload: (() => void) | null = null; let holdReload = false
@@ -53,7 +54,7 @@ let cancelExport = false; let failAction = ''; let failExport = false; let failF
     if (command === 'reload_session_navigator') {
       reloads++
       if (holdReload) await new Promise<void>(resolve => { releaseReload = resolve })
-      if (failReload) throw { error: { code: 'navigator_task_failed', message: 'Cannot read sessions' } }
+      if (failReload) throw { error: { code: 'navigator_task_failed', message: reloadErrorMessage } }
       return empty ? { ...page(String(reloads)), items: [], total: 0, next_cursor: null, has_more: false } : page(String(reloads))
     }
     if (command === 'list_sessions_flat') {
@@ -72,7 +73,10 @@ let cancelExport = false; let failAction = ''; let failExport = false; let failF
       return response(args.path)
     }
     if (command === 'resolve_jsonl_initial_directory') return '/sessions'
-    if (command === 'export_worklog') return { status: 'exported', bundle_path: '/output/codex-worklog/bundle', generated_files: ['index.md'], refreshed: false, folder_opened: true, folder_open_error: null }
+    if (command === 'export_worklog') {
+      if (failExport) throw { error: { code: 'target_not_safe_to_overwrite', message: 'Synthetic unsafe target' } }
+      return { status: 'exported', bundle_path: '/output/codex-worklog/bundle', generated_files: ['index.md'], refreshed: false, folder_opened: !failFolderAfterExport, folder_open_error: failFolderAfterExport ? 'Synthetic folder failure' : null }
+    }
     if (['resolve_navigator_session', 'open_navigator_containing_folder', 'export_navigator_worklog'].includes(command)) {
       assert(args.request.snapshot_id === String(reloads), 'context action keeps its snapshot')
       const item = items.find(item => item.entry_key === args.request.entry_key)!
@@ -121,7 +125,21 @@ function verifyNavigatorHeader() {
   assert(switcher.querySelectorAll('rect').length === (mode() === 'Flat' ? 0 : 3), 'mode icon reflects current list or hierarchy')
 }
 
+function verifyHeaderAlignment() {
+  const content = ['.selected-path-row strong', '.selection-metadata dd', '.resume-row button', '.filter-group[data-filter-layer="core"]', '.status-line-text']
+    .map(q => target.querySelector(q)!.getBoundingClientRect().left)
+  assert(Math.max(...content) - Math.min(...content) < 0.02, 'metadata, Resume, Filters and Status share the content start')
+  const labels = ['.selected-path-row > span', '.selection-metadata dt', '.resume-row > span', '.filter-bar h2', '.status-line-label']
+    .map(q => target.querySelector(q)!.getBoundingClientRect().left)
+  assert(Math.max(...labels) - Math.min(...labels) < 0.02, 'upper row labels share the title start')
+  const rows = ['.filter-bar', '.status-line'].map(q => target.querySelector(q)!.getBoundingClientRect())
+  assert(rows.every(r => Math.abs(r.height - 44) < 0.02), 'both control rows have the same compact height')
+  const pixels = rows.map(r => Math.round(r.bottom * devicePixelRatio) - Math.round(r.top * devicePixelRatio))
+  assert(pixels[0] === pixels[1], 'physical pixel row heights agree at the active DPI')
+}
+
 function verifyOuterBackgrounds() {
+  verifyHeaderAlignment()
   const grid = target.querySelector('.observatory-workspace')!.getBoundingClientRect()
   const panels = [target.querySelector('.workspace-transcript')!, ...['#sessions-panel', '#collection-panel'].map(id => target.querySelector<HTMLElement>(id)!).filter(e => !e.hidden).map(e => e.firstElementChild!)]
   for (const panel of panels) {
@@ -146,7 +164,7 @@ function verifyOuterBackgrounds() {
     const box = footer.getBoundingClientRect()
     assert(boxes.every(rect => rect.width === 28 && rect.height === 28) && Math.abs(boxes[1].left - boxes[0].right - 6) < 1 && Math.abs(box.right - boxes[1].right - 8) < 1, 'footer size, gap and right alignment are uniform')
   }
-  for (const button of target.querySelectorAll<HTMLButtonElement>('.panel-icon-button')) {
+  for (const button of target.querySelectorAll<HTMLButtonElement>('.observatory-workspace .panel-icon-button')) {
     assert(button.title && button.title === button.getAttribute('aria-label'), 'icon tooltip and accessible name explain the action')
   }
   const heading = target.querySelector('.transcript-heading')!
@@ -329,7 +347,7 @@ let workspaceList: Element | null
         assert(!target.textContent?.includes('Session folder opened.'), 'folder success is silent')
         assert(folderTargets.at(-1) === items[index].path && !menu(), 'folder uses right-clicked plain/compressed session')
         await openMenu(index); await choose('Export Worklog'); preserved()
-        assert(exportedTargets.at(-1) === items[index].path && !target.textContent?.includes('Worklog exported'), 'export uses unselected session without status messages')
+        assert(exportedTargets.at(-1) === items[index].path && target.querySelector('.status-line-text')?.textContent?.startsWith('Worklog exported successfully:'), 'export uses unselected session and shared success feedback')
       }
       await openMenu(1)
       menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle()
@@ -355,18 +373,18 @@ let workspaceList: Element | null
     await openMenu(1); await click(reloadButton()); assert(!menu(), 'Reload dismisses old menu')
     const count = exportedTargets.length
     cancelExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(exportedTargets.length === count && !target.textContent?.includes('Export cancelled'), 'cancel does not export or display a message')
+    assert(exportedTargets.length === count && target.querySelector('.status-line-text')?.textContent === 'Worklog export cancelled.', 'cancel does not export and reports no success')
     cancelExport = false
     failExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(target.querySelector('[role="alert"]')?.textContent?.includes('Synthetic unsafe target'), 'export failure after directory selection is visible')
+    assert(target.querySelector('.status-line')?.textContent?.includes('Target not safe to overwrite.'), 'export failure after directory selection is visible')
     failExport = false
     failFolderAfterExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(target.querySelector('.navigator-messages [role="alert"]')?.textContent?.includes('folder could not be opened'), 'folder failure after export remains visible')
+    assert(target.querySelector('.status-line')?.textContent?.includes('folder could not be opened'), 'folder failure after export remains visible')
     failFolderAfterExport = false
     failAction = 'navigator_snapshot_expired'; await openMenu(1); await choose('Open Containing Folder'); preserved()
-    assert(target.querySelector('[role="alert"]')?.textContent?.includes('Reload Sessions'), 'expiry gives reload recovery')
+    assert(target.querySelector('.status-line')?.textContent?.includes('Reload Sessions'), 'expiry gives reload recovery')
     failAction = 'navigator_source_changed'; await openMenu(1); await choose('Open'); preserved()
-    assert(target.querySelector('[role="alert"]')?.textContent?.includes('Synthetic action failure'), 'changed identity does not load')
+    assert(target.querySelector('.status-line')?.textContent?.includes('Synthetic action failure'), 'changed identity does not load')
     failAction = ''; holdExport = true; await openMenu(1); await choose('Export Worklog')
     assert(reloadButton().disabled && row(2)!.disabled, 'pending export blocks conflicting navigator actions')
     assert(!/Preparing Worklog export|Opening…|Exporting worklog/.test(target.textContent ?? ''), 'context progress is silent throughout the app')
@@ -396,12 +414,12 @@ let workspaceList: Element | null
       menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle()
     }
     cancelExport = true; await click(button('Export Worklog'))
-    assert(target.querySelector('.resume-row .action-status')?.textContent === 'Export cancelled.', 'existing top Export keeps cancellation status')
+    assert(target.querySelector('.status-line-text')?.textContent === 'Worklog export cancelled.', 'existing top Export keeps cancellation status')
     cancelExport = false; await click(button('Export Worklog'))
-    const topStatus = target.querySelector('.resume-row .action-status')!.textContent
-    assert(topStatus?.includes('Worklog exported:'), 'existing top Export keeps success status')
+    const topStatus = target.querySelector('.status-line-text')!.textContent
+    assert(topStatus?.includes('Worklog exported successfully:'), 'existing top Export keeps success status')
     await openMenu(2); await choose('Export Worklog')
-    assert(target.querySelector('.resume-row .action-status')!.textContent === topStatus, 'context Export does not replace existing top status')
+    assert(target.querySelector('.status-line-text')!.textContent === topStatus, 'context and toolbar Export share the common success feedback')
   } finally { await unmount(instance) }
   assert(!menu(), 'portal menu removed on unmount')
 }
@@ -501,7 +519,7 @@ async function verifyDuplicateSelection() {
       assert(target.querySelector('.terminal-block') === transcript, label + ': transcript DOM retained')
       assert(row(0)?.getAttribute('aria-current') === 'true', label + ': selection retained')
       assert(status() === 'loaded', label + ': loaded badge retained')
-      assert(target.querySelector('.selection-metadata')?.textContent?.includes('0.jsonl'), label + ': top session information retained')
+      assert(target.querySelector('.selected-path-row')?.textContent?.includes('0.jsonl'), label + ': top session information retained')
       assert(target.querySelector('.navigator-heading h2')?.textContent === 'Sessions (43)', label + ': total count retained')
       assert(!target.querySelector('.navigator-selected'), label + ': no redundant selected summary')
     }
@@ -535,7 +553,7 @@ async function verifyDuplicateSelection() {
     failReload = false; await click(button('Retry Sessions')); assert(entries().length === 20, 'Reload retry')
     expirePage = true; await scrollBottom(); assert(target.textContent?.includes('session list has expired'), 'expiry shown')
     expirePage = false; const prior = reloads; await click(button('Retry Sessions')); assert(reloads === prior + 1, 'expiry retry creates snapshot')
-    await click(button('Select JSONL')); assert(row(0)?.getAttribute('aria-current') === 'true', 'file picker shares active state')
+    await click(row(0)); assert(row(0)?.getAttribute('aria-current') === 'true', 'file picker shares active state')
     for (const theme of ['Terminal Style', 'DM Style (Dark)', 'DM Style', 'Markdown Style']) {
       const select = target.querySelector('select')!
       const option = Array.from(select.options).find(option => option.value === theme)
@@ -634,4 +652,95 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
       }
     }
   } finally { await (globalThis as any).__workspaceStop() }
+}
+
+;(globalThis as any).__feedbackCase = async () => {
+  const instance = mount(App, { target })
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  let failCopy = false
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { if (failCopy) throw new Error('Clipboard denied') } } })
+  const message = () => target.querySelector('.status-line-text')!.textContent!
+  const severity = () => target.querySelector('.status-line')!.getAttribute('data-severity')
+  const statusBackground = () => getComputedStyle(target.querySelector('.status-line-text')!).backgroundColor
+  const checkHeaderRows = () => {
+    verifyHeaderAlignment()
+    assert(getComputedStyle(target.querySelector('.status-line')!).backgroundColor === 'rgb(255, 255, 255)', 'status row stays neutral outside the badge')
+  }
+  const bounds = () => ['.app-header','.observatory-workspace','.status-line'].map(q => {
+    const r = target.querySelector(q)!.getBoundingClientRect(); return [r.y,r.height]
+  })
+  try {
+    await settle()
+    const header = target.querySelector('.app-header')!.getBoundingClientRect()
+    const work = target.querySelector('.observatory-workspace')!.getBoundingClientRect()
+    assert(header.height < 262 && work.height > 454, 'removed upper UI returns space to all panels at 1360x760')
+    assert(Math.abs((262 - header.height) - (work.height - 454)) < 1, 'workspace gains exactly the height removed from the upper area')
+    assert(!target.querySelector('.selected-path-field,.resume-actions') && !target.textContent?.includes('Select JSONL'), 'direct selection UI removed')
+    assert([...target.querySelectorAll('.selection-metadata dt')].map(e => e.textContent).join() === 'Session ID', 'only Session ID metadata remains')
+    assert(message() === 'Ready.' && target.querySelector('.transcript-viewport')!.textContent?.includes('Select a session from Sessions to begin.') && !target.querySelector('.transcript-viewport')!.textContent?.includes('Ready.'), 'base feedback and selection guidance are separate')
+    assert(target.querySelector('.load-state')!.textContent === 'Idle' && (target.querySelector('[aria-label="Reset loaded session"]') as HTMLButtonElement).disabled, 'initial neutral state and Reset condition')
+    checkHeaderRows()
+    assert(statusBackground() === 'rgb(226, 244, 232)', 'normal feedback has a green background')
+    assert(target.querySelector('.status-line-text')!.getBoundingClientRect().width < 100, 'short feedback is a content sized badge')
+    await click(row(0)); await click(target.querySelector('[aria-label="Add to Collection"]'))
+    const stable = JSON.stringify(bounds())
+    assert(target.querySelector('.load-state')!.textContent === 'Loaded' && target.querySelector('.load-state')!.tagName === 'SPAN', 'Loaded badge is display only')
+    assert([...target.querySelector('.header-controls')!.children].map(e => e.classList.contains('load-state') ? 'badge' : e.getAttribute('aria-label')).join() === 'badge,Refresh,Reset loaded session', 'header order is badge, Refresh, Reset')
+    const resetButton = target.querySelector<HTMLButtonElement>('.reset-session-button')!
+    const resetTooltip = document.getElementById(resetButton.getAttribute('aria-describedby')!)!
+    assert(resetTooltip.textContent === 'Reset to idle' && getComputedStyle(resetTooltip).visibility === 'hidden', 'Reset tooltip is described and initially hidden')
+    resetButton.dispatchEvent(new MouseEvent('mouseenter')); await settle()
+    assert(getComputedStyle(resetTooltip).visibility === 'visible', 'Reset hover shows tooltip')
+    assert(resetTooltip.getBoundingClientRect().right <= innerWidth, 'Reset tooltip stays inside the right edge')
+    resetButton.dispatchEvent(new MouseEvent('mouseleave')); await settle()
+    resetButton.focus(); await settle()
+    assert(getComputedStyle(resetTooltip).visibility === 'visible', 'Reset keyboard focus shows tooltip: ' + JSON.stringify({focused:document.activeElement === resetButton,visibility:getComputedStyle(resetTooltip).visibility}))
+    resetButton.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await settle()
+    assert(getComputedStyle(resetTooltip).visibility === 'hidden' && document.activeElement === resetButton, 'Escape hides tooltip without invoking Reset')
+    resetButton.blur()
+    const exportButton = target.querySelector('[aria-label="Export Worklog"]')!
+    assert(exportButton.previousElementSibling?.classList.contains('theme-selector'), 'Export follows Theme')
+    assert(target.querySelector('.resume-row button')?.getAttribute('aria-label') === 'Copy Resume Command', 'Resume copy remains before its command')
+    holdReload = true; await click(reloadButton()); assert(message() === 'Loading sessions…', 'list progress reaches common status')
+    failCopy = true; await click(button('Capture Transcript'))
+    assert(message() === 'Capture failed.' && severity() === 'error' && target.querySelector('.load-state')!.textContent === 'Loaded', 'execution error is separate from successful session load')
+    assert(statusBackground() === 'rgb(253, 232, 231)', 'error feedback has a red background')
+    releaseReload!(); holdReload = false; await settle()
+    assert(message() === 'Capture failed.', 'list completion cannot hide Capture failure')
+    failCopy = false; await click(button('Copy All')); assert(message() === 'Capture failed.', 'unrelated clipboard success cannot hide failure')
+    await click(button('Capture Transcript')); assert(message() === 'Transcript copied to clipboard.' && severity() === 'success', 'same action recovery replaces its error')
+    assert(statusBackground() === 'rgb(226, 244, 232)', 'successful feedback has a green background')
+    assert(JSON.stringify(bounds()) === stable, 'progress, errors and copy results do not change any upper or workspace height')
+    cancelExport = true; await click(button('Export Worklog')); assert(message() === 'Worklog export cancelled.' && severity() === 'info', 'cancel is not success')
+    cancelExport = false; await click(button('Export Worklog')); assert(message().startsWith('Worklog exported successfully:') && severity() === 'success', 'confirmed export succeeds')
+    failFolderAfterExport = true; await click(button('Export Worklog')); assert(severity() === 'warning' && message().includes('folder could not be opened'), 'successful file export with folder failure is warning')
+    assert(statusBackground() === 'rgb(255, 244, 206)', 'warning feedback has a yellow background')
+    await click(button('Copy All')); assert(severity() === 'warning', 'copy cannot hide Export warning')
+    failFolderAfterExport = false; failExport = true; await click(button('Export Worklog')); assert(severity() === 'error' && message() === 'Target not safe to overwrite.', 'unsafe export has no false success')
+    failExport = false; await click(button('Export Worklog'))
+    reloadErrorMessage = 'Cannot read sessions: ' + 'long actionable error '.repeat(80); failReload = true; await click(reloadButton())
+    assert(message() === reloadErrorMessage && severity() === 'error', 'full failure reaches one common location')
+    const text = target.querySelector<HTMLElement>('.status-line-text')!
+    text.focus(); await settle()
+    assert(text.scrollWidth > text.clientWidth && getComputedStyle(text).whiteSpace === 'nowrap', 'long status remains a single truncated line')
+    assert(getComputedStyle(target.querySelector('.status-line-tooltip')!).visibility === 'visible' && target.querySelector('.status-line-tooltip')!.textContent === message(), 'keyboard focus reveals full error')
+    assert(!target.querySelector('.navigator-messages,.action-status,.collection-copy-status,.transcript-action-status,.message-link-error'), 'local runtime feedback containers removed')
+    for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
+      const select = target.querySelector('select')!; select.value = theme; select.dispatchEvent(new Event('change',{bubbles:true})); await settle()
+      assert(JSON.stringify(bounds()) === stable, 'four themes keep fixed status and workspace heights')
+      assert(message() === reloadErrorMessage, 'theme change preserves errors')
+      checkHeaderRows()
+      assert(statusBackground() === 'rgb(253, 232, 231)', 'theme changes preserve the error background')
+      const reset = target.querySelector<HTMLButtonElement>('[aria-label="Reset loaded session"]')!
+      assert(!reset.disabled && getComputedStyle(reset).color === 'rgb(180, 35, 24)', 'enabled Reset remains red in every theme')
+    }
+    failReload = false; await click(button('Retry Sessions')); assert(message() === 'Ready.', 'existing recovery returns to Ready')
+    await click(button('Reset loaded session')); assert(status() === 'idle' && (target.querySelector('#collection-panel') as HTMLElement).hidden, 'Reset retains its lifecycle behavior')
+    return { headerHeight: header.height, workspaceHeight: work.height, gained: work.height - 454 }
+  } finally {
+    failReload = false; holdReload = false; failExport = false; failFolderAfterExport = false; cancelExport = false
+    if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+    else delete (navigator as any).clipboard
+    await unmount(instance)
+  }
 }

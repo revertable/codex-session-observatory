@@ -15,11 +15,12 @@
     getAppVersion,
     locateParentSession,
     parseSelectedJsonl,
-    selectJsonlPath,
     selectWorklogParentDirectory,
     resolveNavigatorSession,
     exportNavigatorWorklog,
   } from './lib/tauri-bridge'
+  import { createStatusController } from './lib/control-room/status-line'
+  import { provideStatus } from './lib/control-room/status-context'
   import SessionHeader from './lib/control-room/SessionHeader.svelte'
   import SpecializedSessionPanel from './lib/control-room/SpecializedSessionPanel.svelte'
   import TranscriptActions from './lib/control-room/TranscriptActions.svelte'
@@ -46,11 +47,10 @@
   import { checkPublicReleaseStatus, type PublicReleaseStatus } from './lib/update-check'
 
   let workflow: LoadWorkflowState = createInitialLoadWorkflowState()
-  let actionStatusMessage = ''
-  let transcriptActionStatusMessage = ''
+  const feedback = createStatusController()
+  provideStatus(feedback)
   let isExportingWorklog = false
   let isLocatingParentSession = false
-  let parentSessionStatusMessage = ''
   let selectedTheme: TranscriptThemeName = 'Terminal Style'
   let collapsedBlocks: Record<number, boolean> = {}
   let publicReleaseStatus: PublicReleaseStatus | null = null
@@ -78,6 +78,7 @@
 
   function selectJsonl(path: string) {
     if (sessionPathKey(workflow.selected_file.path) !== sessionPathKey(path)) {
+      feedback.invalidateSession()
       cancelPanelScroll(transcriptViewport)
       if (transcriptViewport) transcriptViewport.scrollTop = 0
     }
@@ -89,7 +90,6 @@
   async function selectNavigatorSession(item: SessionSummary) {
     if (workflow.status === 'loading' || isExportingWorklog || isLocatingParentSession) return
     if (sessionPathKey(workflow.selected_file.path) !== sessionPathKey(item.path)) selectJsonl(item.path)
-    actionStatusMessage = ''
     await loadSelectedJsonl(item.path)
   }
 
@@ -110,6 +110,7 @@
     return () => {
       active = false
       cancelPanelScroll(transcriptViewport)
+      feedback.dispose()
     }
   })
 
@@ -146,18 +147,6 @@
     }
   }
 
-  async function chooseJsonlPath() {
-    const selectedPath = await selectJsonlPath()
-
-    if (selectedPath !== null) {
-      selectJsonl(selectedPath)
-      actionStatusMessage = ''
-      transcriptActionStatusMessage = ''
-      parentSessionStatusMessage = ''
-      await loadSelectedJsonl(selectedPath)
-    }
-  }
-
   async function loadSelectedJsonl(pathOverride?: string) {
     const path = (pathOverride ?? workflow.selected_file.path).trim()
 
@@ -166,33 +155,29 @@
     }
 
     const generation = ++loadGeneration
+    const token = feedback.begin('transcript', 'Loading the selected JSONL file…', true)
 
     replaceWorkflow(beginLoad(workflow))
-    transcriptActionStatusMessage = ''
-    parentSessionStatusMessage = ''
 
     try {
       const response = await loadAllObservations(path, parseSelectedJsonl)
       if (generation !== loadGeneration) return
       replaceWorkflow(applyParseResponse(workflow, response))
-      actionStatusMessage = ''
+      feedback.finish(token)
     } catch (error) {
       if (generation !== loadGeneration) return
-      replaceWorkflow(failLoad(workflow, normalizeLoadError(error)))
-      actionStatusMessage = ''
+      const normalized = normalizeLoadError(error)
+      replaceWorkflow(failLoad(workflow, normalized))
+      feedback.finish(token, 'error', normalized.message)
     }
   }
 
   function handleFilterChange(key: keyof LoadWorkflowState['filter'], value: boolean) {
     replaceWorkflow(updateFilter(workflow, key, value))
-    transcriptActionStatusMessage = ''
-    parentSessionStatusMessage = ''
   }
 
   function handleThemeChange(theme: TranscriptThemeName) {
     replaceTheme(theme)
-    transcriptActionStatusMessage = ''
-    parentSessionStatusMessage = ''
   }
 
   function resetToIdle() {
@@ -201,11 +186,9 @@
     }
 
     loadGeneration++
+    feedback.invalidateSession()
     replaceWorkflow(createInitialLoadWorkflowState())
     collection = createCollectionState()
-    actionStatusMessage = ''
-    transcriptActionStatusMessage = ''
-    parentSessionStatusMessage = ''
     replaceTheme('Terminal Style')
   }
 
@@ -220,15 +203,16 @@
       return
     }
 
+    const token = feedback.begin('resume-copy', '', true)
     try {
       if (navigator.clipboard == null) {
         throw new Error('Clipboard access is unavailable.')
       }
 
       await navigator.clipboard.writeText(command)
-      actionStatusMessage = 'Copied.'
+      feedback.finish(token, 'success', 'Copied to clipboard.')
     } catch {
-      actionStatusMessage = 'Copy failed.'
+      feedback.finish(token, 'error', 'Copy failed.')
     }
   }
 
@@ -249,19 +233,20 @@
     })
 
     if (transcriptText === '') {
-      transcriptActionStatusMessage = 'No transcript text available.'
+      feedback.finish(feedback.begin('capture', '', true), 'warning', 'No transcript text available.')
       return
     }
 
+    const token = feedback.begin('capture', '', true)
     try {
       if (navigator.clipboard == null) {
         throw new Error('Clipboard access is unavailable.')
       }
 
       await navigator.clipboard.writeText(transcriptText)
-      transcriptActionStatusMessage = 'Transcript captured.'
+      feedback.finish(token, 'success', 'Transcript copied to clipboard.')
     } catch {
-      transcriptActionStatusMessage = 'Capture failed.'
+      feedback.finish(token, 'error', 'Capture failed.')
     }
   }
 
@@ -283,47 +268,35 @@
 
   async function handleNavigatorExport(target: NavigatorTarget): Promise<void> {
     if (isExportingWorklog) return
-    return runWorklogExport(() => resolveNavigatorSession(target), parent => exportNavigatorWorklog(target, parent), true)
+    return runWorklogExport(() => resolveNavigatorSession(target), parent => exportNavigatorWorklog(target, parent))
   }
 
-  async function runWorklogExport(resolveSource: () => Promise<string>, perform: (parent: string) => Promise<ExportWorklogResponse>, rejectError = false): Promise<void> {
+  async function runWorklogExport(resolveSource: () => Promise<string>, perform: (parent: string) => Promise<ExportWorklogResponse>): Promise<void> {
     isExportingWorklog = true
-
+    const token = feedback.begin('export', 'Preparing worklog export…')
     try {
       const path = await resolveSource()
       const parentDirectory = await selectWorklogParentDirectory(path)
       if (parentDirectory === null) {
-        if (!rejectError) actionStatusMessage = 'Export cancelled.'
+        feedback.finish(token, 'info', 'Worklog export cancelled.')
         return
       }
-
-      if (!rejectError) actionStatusMessage = 'Exporting worklog…'
+      feedback.finish(token, 'progress', 'Exporting worklog…')
       const result = await perform(parentDirectory)
-      if (rejectError) {
-        if (!result.folder_opened) throw new Error(result.refreshed
+      if (!result.folder_opened) {
+        feedback.finish(token, 'warning', result.refreshed
           ? 'Worklog refreshed, but folder could not be opened.'
           : 'Worklog exported, but folder could not be opened.')
-        return
-      }
-      if (!result.folder_opened) {
-        actionStatusMessage = result.refreshed
-          ? 'Worklog refreshed, but folder could not be opened.'
-          : 'Worklog exported, but folder could not be opened.'
       } else {
-        actionStatusMessage = result.refreshed
-          ? `Worklog refreshed: ${displayFriendlyPath(result.bundle_path)}`
-          : `Worklog exported: ${displayFriendlyPath(result.bundle_path)}`
+        feedback.finish(token, 'success', result.refreshed
+          ? `Worklog refreshed successfully: ${displayFriendlyPath(result.bundle_path)}`
+          : `Worklog exported successfully: ${displayFriendlyPath(result.bundle_path)}`)
       }
     } catch (error) {
       const apiError = normalizeLoadError(error)
-      if (rejectError) throw apiError
-      actionStatusMessage =
-        apiError.code === 'target_not_safe_to_overwrite'
-          ? 'Target not safe to overwrite.'
-          : `Worklog export failed: ${apiError.message}`
-    } finally {
-      isExportingWorklog = false
-    }
+      feedback.finish(token, 'error', apiError.code === 'target_not_safe_to_overwrite'
+        ? 'Target not safe to overwrite.' : `Worklog export failed: ${apiError.message}`)
+    } finally { isExportingWorklog = false }
   }
 
   async function openParentSession() {
@@ -342,7 +315,7 @@
     }
 
     isLocatingParentSession = true
-    parentSessionStatusMessage = 'Finding parent session locally…'
+    const token = feedback.begin('parent', 'Finding parent session locally…', true)
 
     try {
       const result = await locateParentSession(metadata.absolute_path, parentThreadId)
@@ -353,18 +326,18 @@
         return
       }
       if (result.status !== 'found' || result.path == null) {
-        parentSessionStatusMessage = result.message
+        feedback.finish(token, result.status === 'unavailable' ? 'error' : 'warning', result.message)
         return
       }
 
       selectJsonl(result.path)
       await loadSelectedJsonl(result.path)
       if (workflow.status === 'loaded') {
-        actionStatusMessage = 'Parent session opened.'
+        feedback.finish(feedback.begin('parent', '', true), 'success', 'Parent session opened.')
       }
     } catch (error) {
       const apiError = normalizeLoadError(error)
-      parentSessionStatusMessage = `Parent session lookup failed: ${apiError.message}`
+      feedback.finish(token, 'error', `Parent session lookup failed: ${apiError.message}`)
     } finally {
       isLocatingParentSession = false
     }
@@ -410,9 +383,6 @@
     onToggleSessions={() => { sessionsOpen = !sessionsOpen }}
     onToggleCollection={() => { collection = { ...collection, isOpen: !collection.isOpen } }}
     {isExportingWorklog}
-    {actionStatusMessage}
-    errorMessage={workflow.error?.message ?? null}
-    onChooseJsonl={chooseJsonlPath}
     onRefresh={loadSelectedJsonl}
     onReset={resetToIdle}
     onCopyResume={copyResumeCommand}
@@ -435,7 +405,6 @@
     status={workflow.status}
     hasSelectedPath={workflow.selected_file.path.trim() !== ''}
     canCaptureTranscript={workflow.loaded_file.session?.capabilities.can_show_transcript === true}
-    actionStatusMessage={transcriptActionStatusMessage}
     onCapture={captureTranscript}
     onRefresh={loadSelectedJsonl}
   />
@@ -450,7 +419,6 @@
         <SpecializedSessionPanel
           session={workflow.loaded_file.session}
           isLocatingParent={isLocatingParentSession}
-          parentStatusMessage={parentSessionStatusMessage}
           onOpenParent={openParentSession}
         />
       {:else}

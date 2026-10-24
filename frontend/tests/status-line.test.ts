@@ -1,0 +1,48 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { createStatusController } from '../src/lib/control-room/status-line.ts'
+
+test('independent successes and progress never erase another operation failure or warning', () => {
+  const s = createStatusController()
+  s.finish(s.begin('export'), 'warning', 'Folder could not be opened.')
+  s.finish(s.begin('copy'), 'success', 'Copied.')
+  assert.equal(s.current().message, 'Folder could not be opened.')
+  s.finish(s.begin('sessions'), 'error', 'Cannot list sessions.')
+  s.finish(s.begin('copy'), 'success', 'Copied again.')
+  assert.equal(s.current().message, 'Cannot list sessions.')
+  const retry = s.begin('sessions', 'Loading sessions…')
+  assert.equal(s.current().message, 'Folder could not be opened.')
+  s.finish(retry)
+  s.finish(s.begin('export'), 'success', 'Exported.')
+  assert.equal(s.current().message, 'Exported.')
+})
+
+test('superseded completions, session changes and disposal cannot publish stale feedback', () => {
+  const s = createStatusController()
+  const old = s.begin('transcript', 'Loading old session', true)
+  const latest = s.begin('transcript', 'Loading latest session', true)
+  assert.equal(s.finish(old, 'error', 'Old error'), false)
+  s.finish(latest)
+  assert.equal(s.current().message, 'Ready.')
+  const copy = s.begin('copy', '', true)
+  const exportRequest = s.begin('export', 'Exporting')
+  s.invalidateSession()
+  assert.equal(s.finish(copy, 'success', 'Old session copied'), false)
+  assert.equal(s.current().message, 'Exporting')
+  s.finish(exportRequest, 'info', 'Export cancelled.')
+  assert.equal(s.current().severity, 'info')
+  const disposed = s.begin('copy')
+  s.dispose()
+  assert.equal(s.finish(disposed, 'error', 'Late error'), false)
+})
+
+test('progress stays visible until every unrelated pending action finishes', () => {
+  const s = createStatusController()
+  const loading = s.begin('sessions', 'Loading sessions…')
+  s.finish(s.begin('copy'), 'success', 'Copied.')
+  assert.equal(s.current().message, 'Loading sessions…')
+  s.finish(loading)
+  assert.equal(s.current().message, 'Copied.')
+  s.finish(s.begin('transcript', 'Loading transcript'))
+  assert.equal(s.current().message, 'Ready.')
+})

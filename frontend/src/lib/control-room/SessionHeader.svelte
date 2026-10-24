@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatusLine from './StatusLine.svelte'
+  import { useStatus } from './status-context'
   import type { LoadStatus } from '../load-workflow'
   import type {
     FilterDto,
@@ -21,9 +23,6 @@
     onToggleSessions: () => void
     onToggleCollection: () => void
     isExportingWorklog: boolean
-    actionStatusMessage: string
-    errorMessage: string | null
-    onChooseJsonl: () => void | Promise<void>
     onRefresh: () => void | Promise<void>
     onReset: () => void
     onCopyResume: () => void | Promise<void>
@@ -45,9 +44,6 @@
     onToggleSessions,
     onToggleCollection,
     isExportingWorklog,
-    actionStatusMessage,
-    errorMessage,
-    onChooseJsonl,
     onRefresh,
     onReset,
     onCopyResume,
@@ -55,6 +51,29 @@
     onFilterChange,
     onThemeChange,
   }: Props = $props()
+
+  const feedback = useStatus()!
+  const resetTooltipId = $props.id()
+  let resetButton: HTMLButtonElement | undefined = $state()
+  let resetTooltip: HTMLSpanElement | undefined = $state()
+  let resetHovered = $state(false)
+  let resetFocused = $state(false)
+  let resetDismissed = $state(false)
+  let resetLeft = $state(0)
+  let resetTop = $state(0)
+  const resetTooltipOpen = $derived((resetHovered || resetFocused) && !resetDismissed)
+  function positionResetTooltip() {
+    if (!resetButton || !resetTooltip) return
+    const anchor = resetButton.getBoundingClientRect()
+    resetLeft = Math.max(8, Math.min(anchor.left, window.innerWidth - resetTooltip.getBoundingClientRect().width - 8))
+    resetTop = anchor.bottom + 6
+  }
+  $effect(() => {
+    if (!resetTooltipOpen) return
+    positionResetTooltip()
+    window.addEventListener('resize', positionResetTooltip)
+    return () => window.removeEventListener('resize', positionResetTooltip)
+  })
 
   const filterGroups = [
     {
@@ -80,49 +99,27 @@
   )
 </script>
 
-<header class="app-header" aria-labelledby="app-title">
+<header class="app-header" data-theme={selectedTheme} aria-labelledby="app-title">
   <div class="toolbar">
     <div class="product-heading">
       <p class="eyebrow">Local transcript viewer</p>
       <h1 id="app-title">Codex Session Observatory</h1>
     </div>
 
-    <div class="toolbar-actions">
-      <button type="button" onclick={onChooseJsonl}>Select JSONL</button>
-
-      <label class="selected-path-field">
-        <span>Selected JSONL path</span>
-        <input
-          type="text"
-          value={selectedPath}
-          placeholder="No JSONL selected"
-          readonly
-        />
-      </label>
-
-      <button
-        type="button"
-        class="compact-action-button"
-        disabled={selectedPath.trim() === ''}
-        onclick={() => onRefresh()}
-      >
-        Refresh
+    <div class="header-controls panel-controls">
+      <span class="status load-state" data-status={status}>{status === 'loaded' ? 'Loaded' : status[0].toUpperCase() + status.slice(1)}</span>
+      <button type="button" class="toolbar-icon-button panel-icon-button" aria-label="Refresh" title="Refresh" disabled={selectedPath.trim() === ''} onclick={() => onRefresh()}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7" /></svg>
       </button>
-      {#if status === 'loaded'}
-        <button
-          type="button"
-          class="status status-reset"
-          data-status={status}
-          aria-label="Reset loaded session"
-          title="Reset to idle"
-          disabled={isExportingWorklog}
-          onclick={onReset}
-        >
-          {status}
-        </button>
-      {:else}
-        <span class="status" data-status={status}>{status}</span>
-      {/if}
+      <button type="button" class="toolbar-icon-button panel-icon-button reset-session-button" aria-label="Reset loaded session" aria-describedby={resetTooltipId}
+        bind:this={resetButton} disabled={status !== 'loaded' || isExportingWorklog} onclick={onReset}
+        onmouseenter={() => { resetHovered = true; resetDismissed = false }} onmouseleave={() => { resetHovered = false }}
+        onfocusin={() => { resetFocused = true; resetDismissed = false }} onfocusout={() => { resetFocused = false }}
+        onkeydown={event => { if (event.key === 'Escape') { resetDismissed = true; event.preventDefault() } }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        <span id={resetTooltipId} role="tooltip" class="reset-session-tooltip" class:visible={resetTooltipOpen}
+          bind:this={resetTooltip} style:left={`${resetLeft}px`} style:top={`${resetTop}px`}>Reset to idle</span>
+      </button>
     </div>
   </div>
 
@@ -134,42 +131,17 @@
 
     <dl class="selection-metadata">
       <div>
-        <dt>File</dt>
-        <dd>{metadata?.file_name ?? 'Not loaded'}</dd>
-      </div>
-      <div>
         <dt>Session ID</dt>
         <dd>{metadata?.session_id ?? 'Not detected'}</dd>
       </div>
-      <div>
-        <dt>Session type</dt>
-        <dd>{specializedPresentation?.label ?? (status === 'loaded' ? 'Ordinary session' : 'Not loaded')}</dd>
-      </div>
     </dl>
 
-    <div class="resume-row">
+    <div class="resume-row panel-controls">
       <span>Resume command</span>
-      <code>{specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}</code>
-      <div class="resume-actions">
-        <button
-          type="button"
-          class="secondary resume-action-button"
-          disabled={session?.capabilities.can_resume !== true || metadata?.resume_command == null}
-          onclick={onCopyResume}
-        >
-          Copy Resume Command
-        </button>
-        <button
-          type="button"
-          class="secondary resume-action-button"
-          title={specializedPresentation?.exportUnavailable}
-          disabled={status !== 'loaded' || session?.capabilities.can_export_worklog !== true || isExportingWorklog}
-          onclick={onExportWorklog}
-        >
-          Export Worklog
-        </button>
-      </div>
-      <span class="action-status" aria-live="polite">{actionStatusMessage}</span>
+      <button type="button" class="toolbar-icon-button panel-icon-button" aria-label="Copy Resume Command" title="Copy Resume Command" disabled={session?.capabilities.can_resume !== true || metadata?.resume_command == null} onclick={onCopyResume}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H4v13h4" /></svg>
+      </button>
+      <code title={specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}>{specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}</code>
     </div>
   </section>
 
@@ -191,7 +163,7 @@
         </div>
       {/each}
     </div>
-    <div class="view-controls">
+    <div class="view-controls panel-controls">
     <label class="theme-selector">
       <span>Theme</span>
       <select
@@ -203,7 +175,10 @@
         {/each}
       </select>
     </label>
-    <button type="button" class="collection-panel-toggle" class:active={sessionsOpen}
+    <button type="button" class="toolbar-icon-button panel-icon-button" aria-label="Export Worklog" title={specializedPresentation?.exportUnavailable ?? 'Export Worklog'} disabled={status !== 'loaded' || session?.capabilities.can_export_worklog !== true || isExportingWorklog} onclick={onExportWorklog}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg>
+    </button>
+    <button type="button" class="collection-panel-toggle panel-icon-button" class:active={sessionsOpen}
       aria-label={sessionsOpen ? 'Hide Sessions' : 'Show Sessions'}
       title={sessionsOpen ? 'Hide Sessions' : 'Show Sessions'}
       aria-expanded={sessionsOpen} aria-controls="sessions-panel" onclick={onToggleSessions}>
@@ -213,7 +188,7 @@
     </button>
     <button
       type="button"
-      class="collection-panel-toggle"
+      class="collection-panel-toggle panel-icon-button"
       class:active={collectionOpen}
       aria-label={collectionOpen ? 'Hide Collection' : 'Show Collection'}
       title={collectionOpen ? 'Hide Collection' : 'Show Collection'}
@@ -229,11 +204,5 @@
     </div>
   </section>
 
-  {#if status === 'loading'}
-    <p class="status-message" aria-live="polite">Loading the selected JSONL file…</p>
-  {:else if status === 'error'}
-    <p class="status-message error" aria-live="assertive">
-      {errorMessage ?? 'The selected JSONL file could not be loaded.'}
-    </p>
-  {/if}
+  <StatusLine {feedback} />
 </header>

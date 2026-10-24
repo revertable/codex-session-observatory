@@ -72,10 +72,9 @@
         <div><UpdateNotice releaseStatus={publicReleaseStatus} presentation="terminal" /></div>
       {/if}
       <div class="terminal-blank" aria-hidden="true"></div>
-      <div>Select a local JSONL session to begin.</div>
+      <div>Select a session from Sessions to begin.</div>
     {/if}
     <div class="terminal-metadata">Current theme: {theme}</div>
-    <div>Ready.</div>
   {:else}
     <div class="terminal-separator">{separator}</div>
     <div class="terminal-blank" aria-hidden="true"></div>

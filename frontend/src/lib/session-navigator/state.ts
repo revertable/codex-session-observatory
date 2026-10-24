@@ -1,3 +1,4 @@
+import type { StatusController, StatusToken } from '../control-room/status-line'
 import type { ApiErrorDto } from '../parse-contract'
 import type { NavigatorApi, SessionHierarchy, SessionPage, SessionSummary } from './contract'
 
@@ -36,13 +37,27 @@ function asError(error: unknown): ApiErrorDto {
 }
 
 /** Independent from transcript state. A generation owns all requests on a snapshot. */
-export function createNavigator(api: NavigatorApi) {
+export function createNavigator(api: NavigatorApi, feedback?: StatusController) {
   let state: NavigatorState = { mode: 'Flat', page: null, hierarchy: null, loading: false,
     loadingMore: false, loadingHierarchy: false, error: null, failedAction: null }
   let generation = 0
   const listeners = new Set<(state: NavigatorState) => void>()
+  let feedbackToken: StatusToken | undefined
   const publish = (patch: Partial<NavigatorState>) => {
-    state = { ...state, ...patch }; for (const listener of listeners) listener(state)
+    const wasBusy = state.loading || state.loadingMore || state.loadingHierarchy
+    const previousError = state.error
+    state = { ...state, ...patch }
+    const busy = state.loading || state.loadingMore || state.loadingHierarchy
+    if (busy && (!wasBusy || patch.loading === true)) {
+      feedbackToken = feedback?.begin('sessions', state.loading ? 'Loading sessions…'
+        : state.loadingHierarchy ? 'Loading hierarchy…' : 'Loading more sessions…')
+    }
+    if (state.error && state.error !== previousError) {
+      feedbackToken ??= feedback?.begin('sessions')
+      feedback?.finish(feedbackToken, 'error', state.error.message + (state.error.code === 'navigator_snapshot_expired'
+        ? ' The session list has expired. Reload Sessions to retry.' : ''))
+    } else if (wasBusy && !busy && !state.error) feedback?.finish(feedbackToken)
+    for (const listener of listeners) listener(state)
   }
   function fail(error: unknown, action: NonNullable<NavigatorState['failedAction']>) {
     const normalized = asError(error)

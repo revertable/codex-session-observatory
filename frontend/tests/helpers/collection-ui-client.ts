@@ -42,7 +42,10 @@ const response: ParseResponseDto = {
     ],
   },
 }
+let selectedPath = 'session.jsonl'
+const navigatorPage = () => ({ snapshot_id: 'test', sessions_root: '.', total: 2, items: [selectedPath, 'other-' + selectedPath].map((path, i) => ({entry_key: String(i), thread_id: String(i), path, title: i ? 'Other fixture' : 'Session fixture', title_source: 'database_name', created_at_ms: 1, created_at_source: 'session_meta', last_conversation_at_ms: null, last_conversation_at_source: 'unavailable', storage_date: null, classification: 'interactive', thread_source: 'user'})), next_cursor: null, has_more: false, diagnostics: { discovered_files: 2, guardian_sessions: 0, duplicate_files: 0, unreadable_files: 0, warnings: [] } })
 ;(window as any).__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+  if (command === 'reload_session_navigator') return navigatorPage()
   if (command === 'resolve_jsonl_initial_directory') return '.'
   if (command === 'plugin:dialog|open') return 'session.jsonl'
   if (command === 'parse_selected_jsonl') return structuredClone(response)
@@ -63,16 +66,16 @@ const click = async (label: string) => {
     assert(!target.querySelector('[aria-label="Scroll to Bottom"]'), 'global Bottom removed')
     assert((target.querySelector('[aria-label="Capture Transcript"]') as HTMLButtonElement).disabled, 'Capture disabled without session')
     assert((target.querySelector('[aria-label="Copy All"]') as HTMLButtonElement).disabled && (target.querySelector('[aria-label="Clear Collection"]') as HTMLButtonElement).disabled, 'empty Collection actions disabled')
-    await click('Select JSONL')
-    const status = target.querySelector('.action-status') as HTMLElement
+    await click('Session fixture')
+    const status = target.querySelector('.status-line-text') as HTMLElement
     const resume = target.querySelector('.resume-row') as HTMLElement
     const emptyHeight = resume.getBoundingClientRect().height
-    assert(status.getBoundingClientRect().height === 0, 'empty notice takes no height')
+    assert(status.textContent === 'Ready.', 'base state is Ready')
     await click('Copy Resume Command')
-    assert(copied === 'codex resume test' && status.textContent === 'Copied.', 'copy notice retained')
-    assert(resume.getBoundingClientRect().height > emptyHeight, 'notice allocates space')
+    assert(copied === 'codex resume test' && status.textContent === 'Copied to clipboard.', 'copy notice retained')
+    assert(resume.getBoundingClientRect().height === emptyHeight, 'copy feedback never resizes Resume row')
     await click('Refresh')
-    assert(status.textContent === '' && status.getBoundingClientRect().height === 0, 'cleared notice takes no height')
+    assert(status.textContent === 'Ready.', 'successful Refresh returns to Ready')
     assert(resume.getBoundingClientRect().height === emptyHeight, 'resume row returns to initial height')
 
     const toolFilter = Array.from(target.querySelectorAll('label')).find(label => label.textContent?.trim() === 'Tool calls')!.querySelector('input')!
@@ -95,7 +98,7 @@ const click = async (label: string) => {
     assert(copied === expected, 'clipboard header and raw body match panel')
     await click('Capture Transcript')
     assert(copied.includes('A\nSecond line') && copied.includes('original line') && panel.querySelectorAll('article').length === 3, 'Capture retains content and Collection state')
-    assert(target.querySelector('.transcript-panel-header .transcript-action-status')?.textContent === 'Transcript captured.', 'existing Capture feedback moved to header')
+    assert(target.querySelector('.status-line-text')?.textContent === 'Transcript copied to clipboard.', 'existing Capture feedback moved to header')
 
     const bottom = () => (target.querySelector('.transcript-viewport') as HTMLElement).scrollHeight - (target.querySelector('.transcript-viewport') as HTMLElement).clientHeight
     assert(bottom() > 0, 'fixture requires a scrollable Transcript')

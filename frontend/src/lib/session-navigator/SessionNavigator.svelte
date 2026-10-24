@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { useStatus } from '../control-room/status-context'
   import { sessionNavigatorApi, resolveNavigatorSession, openNavigatorContainingFolder } from '../tauri-bridge'
   import { createNavigator, matchesSelection } from './state'
   import SessionEntry from './SessionEntry.svelte'
@@ -17,14 +18,14 @@
     onSelect: (item: SessionSummary) => Promise<void>
     onExport: (target: NavigatorTarget) => Promise<void>
   } = $props()
-  const navigator = createNavigator(sessionNavigatorApi)
+  const feedback = useStatus()!
+  const navigator = createNavigator(sessionNavigatorApi, feedback)
   let viewport: HTMLDivElement | undefined = $state()
   let now = $state(Date.now())
   const nextMode = $derived($navigator.mode === 'Flat' ? 'Hierarchical' : 'Flat')
   const snapshotId = $derived($navigator.page?.snapshot_id)
   let context = $state<{ item: SessionSummary; target: NavigatorTarget; x: number; y: number; anchor: HTMLButtonElement } | null>(null)
   let actionBusy = $state(false)
-  let actionError = $state('')
   const blocked = $derived(selecting || actionBusy || $navigator.loading)
   function closeMenu() {
     const anchor = context?.anchor
@@ -39,7 +40,8 @@
     const current = context
     if (!current || blocked) return
     closeMenu()
-    actionBusy = true; actionError = ''
+    actionBusy = true
+    const token = kind === 'export' ? undefined : feedback.begin('navigator-action')
     try {
       if (kind === 'open') {
         const path = await resolveNavigatorSession(current.target)
@@ -47,9 +49,10 @@
       } else if (kind === 'folder') {
         await openNavigatorContainingFolder(current.target)
       } else await onExport(current.target)
+      feedback.finish(token)
     } catch (error) {
-      actionError = (error as { message?: string })?.message ?? String(error)
-      if ((error as { code?: string })?.code === 'navigator_snapshot_expired') actionError += ' Reload Sessions to retry.'
+      const message = (error as { message?: string })?.message ?? String(error)
+      feedback.finish(token, 'error', message + ((error as { code?: string })?.code === 'navigator_snapshot_expired' ? ' Reload Sessions to retry.' : ''))
     } finally { actionBusy = false }
   }
   $effect(() => {
@@ -105,7 +108,7 @@
         </button>
         <button type="button" class="toolbar-icon-button panel-icon-button navigator-reload" aria-label="Reload Sessions"
           title="Reload Sessions" disabled={$navigator.loading || actionBusy}
-          onclick={() => { actionError = ''; void navigator.reload() }}>
+          onclick={() => { feedback.clear('navigator-action'); void navigator.reload() }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
             <path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7" />
           </svg>
@@ -113,24 +116,15 @@
       </div>
     </div>
   </header>
-  <div class="navigator-messages" aria-live="polite">
-    {#if actionError}<p role="alert">{actionError}</p>{/if}
-    {#if $navigator.loading}<p role="status">Loading sessions…</p>{/if}
-    {#if $navigator.loadingHierarchy}<p role="status">Loading hierarchy…</p>{/if}
-    {#if $navigator.error}
-      <div role="alert"><p>{$navigator.error.message}</p>
-        {#if $navigator.error.code === 'navigator_snapshot_expired'}<p>The session list has expired. Retry to reload it.</p>{/if}
-        <button type="button" class="secondary" onclick={() => navigator.retry()}>Retry Sessions</button>
-      </div>
-    {/if}
-  </div>
+  {#if $navigator.error}
+    <div class="navigator-recovery"><button type="button" class="secondary" onclick={() => { feedback.clear('navigator-action'); void navigator.retry() }}>Retry Sessions</button></div>
+  {/if}
   <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable content must be keyboard focusable.) -->
   <div class="navigator-list panel-scroll" bind:this={viewport} onscroll={nearBottom} role="region" tabindex="0" aria-label="Session list"
     aria-busy={$navigator.loading || $navigator.loadingMore || $navigator.loadingHierarchy}>
     {#if !$navigator.loading && $navigator.page?.total === 0}<p class="navigator-empty">No sessions found.</p>{/if}
     {#if $navigator.mode === 'Flat'}
       {#each $navigator.page?.items ?? [] as item (item.entry_key)}{@render row(item)}{/each}
-      {#if $navigator.loadingMore}<p class="navigator-empty" role="status">Loading more sessions…</p>{/if}
     {:else if $navigator.hierarchy}
       {#each [...$navigator.hierarchy.years].sort((a, b) => b.year - a.year) as year (year.year)}
         <details class="navigator-year" open>

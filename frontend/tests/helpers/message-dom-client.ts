@@ -68,7 +68,7 @@ const cases: Record<string, () => Promise<void>> = {
                     const surface = target.querySelector<HTMLElement>('.transcript-presentation')!;
                     const empty = surface.querySelector('.transcript-empty-state')!;
                     assert(empty.querySelector('.empty-intro')?.textContent === 'Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.', 'intro text preserved');
-                    assert(empty.querySelector('.empty-selection')?.textContent === 'Select a local JSONL session to begin.' && empty.querySelector('.empty-ready')?.textContent === 'Ready.', 'selection and Ready text preserved');
+                    assert(empty.querySelector('.empty-selection')?.textContent === 'Select a session from Sessions to begin.' && !empty.querySelector('.empty-ready'), 'selection and Ready text preserved');
                     assert(empty.querySelector('.empty-metadata')?.textContent === 'Current theme: ' + theme, 'theme text preserved');
                     const intro = getComputedStyle(empty.querySelector('.empty-intro')!), metadata = getComputedStyle(empty.querySelector('.empty-metadata')!);
                     assert(intro.color !== metadata.color && Number(intro.fontWeight) > Number(metadata.fontWeight), 'intro and metadata have distinct hierarchy');
@@ -178,11 +178,11 @@ const cases: Record<string, () => Promise<void>> = {
             anchor.click();
             await settle();
             failOpen = false;
-            assert(target.querySelector('.message-link-error')?.textContent === 'Could not open this link.', 'error displayed');
+            assert(target.querySelector('.status-line-text')?.textContent === 'Could not open this link.', 'error displayed');
             assert(host.querySelector('strong') === leaf, 'link error does not rebuild');
             anchor.click();
             await settle();
-            assert(!target.querySelector('.message-link-error'), 'success clears error');
+            assert(!target.querySelector('.status-line-text')?.textContent?.includes('Could not open this link.'), 'success clears error');
             assert(host.querySelector('strong') === leaf, 'link success does not rebuild');
             observer.disconnect();
             instance.replace({ block: block('*two*\n\n' + tableSource) });
