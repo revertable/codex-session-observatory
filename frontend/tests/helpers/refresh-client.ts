@@ -96,7 +96,7 @@ const response: ParseResponseDto = {
     selectedPath = path
     const instance = mount(App, { target })
     const refreshButtons = () => Array.from(target.querySelectorAll('button'))
-      .filter(button => button.textContent?.trim() === 'Refresh')
+      .filter(button => button.textContent?.trim() === 'Refresh' || button.getAttribute('aria-label') === 'Refresh Transcript')
     const panel = () => target.querySelector<HTMLElement>('#collection-panel')!
     const collectionBodies = () => Array.from(panel().querySelectorAll('article pre')).map(node => node.textContent)
     const resolve = async (physicalPath = path) => {
@@ -133,7 +133,7 @@ const response: ParseResponseDto = {
         }
       }
       refreshButtons()[1].click(); await settle(); await resolve()
-      assert(status() === 'loaded' && panel().hidden, 'bottom Refresh retries after failure with closed panel preserved')
+      assert(status() === 'loaded' && panel().hidden, 'Transcript header Refresh retries after failure with closed panel preserved')
     } finally { await unmount(instance) }
   }
   selectedPath = 'session.jsonl'

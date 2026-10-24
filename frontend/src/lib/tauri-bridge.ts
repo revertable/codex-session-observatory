@@ -4,7 +4,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import type { ApiErrorDto, ErrorResponseDto, FilterDto, ParseResponseDto } from './parse-contract'
 import type { LocateParentSessionResponse } from './parent-session-contract'
 import type { ExportWorklogResponse } from './worklog-contract'
-import type { NavigatorApi, SessionPage, SessionHierarchy } from './session-navigator/contract'
+import type { NavigatorApi, SessionPage, SessionHierarchy, NavigatorTarget } from './session-navigator/contract'
 
 async function navigatorInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try { return await invoke<T>(command, args) }
@@ -16,6 +16,11 @@ export const sessionNavigatorApi: NavigatorApi = {
   flat: (snapshot_id, cursor) => navigatorInvoke<SessionPage>('list_sessions_flat', { request: { snapshot_id, cursor } }),
   hierarchy: (snapshot_id) => navigatorInvoke<SessionHierarchy>('list_sessions_hierarchy', { request: { snapshot_id } }),
 }
+
+export const resolveNavigatorSession = (request: NavigatorTarget) => navigatorInvoke<string>('resolve_navigator_session', { request })
+export const openNavigatorContainingFolder = (request: NavigatorTarget) => navigatorInvoke<void>('open_navigator_containing_folder', { request })
+export const exportNavigatorWorklog = (request: NavigatorTarget, parentDirectory: string) =>
+  navigatorInvoke<ExportWorklogResponse>('export_navigator_worklog', { request, parentDirectory })
 
 let lastSelectedDirectory: string | null = null
 let lastWorklogParentDirectory: string | null = null

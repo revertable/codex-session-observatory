@@ -7,6 +7,40 @@ let harness: Awaited<ReturnType<typeof startClientHarness>>
 before(async () => { harness = await startClientHarness() }, { timeout: 60000 })
 after(async () => { await harness?.close() })
 
+test('theme surfaces preserve common geometry, scroll boundaries and panel control palettes', { timeout: 60000 }, async () => {
+  const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try { await workspace.evaluate('globalThis.__themeSurfaceCase()') }
+  finally { await workspace.close() }
+})
+
+test('workspace heights fill the visible area and preserve independent scrolling', { timeout: 60000 }, async () => {
+  const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    await workspace.evaluate('globalThis.__heightStart()')
+    await workspace.evaluate('globalThis.__heightCheck("Terminal Style",true,true,true)')
+    await workspace.evaluate('globalThis.__heightLoad()')
+    for (const [width,height] of [[1360,760],[1100,720],[1600,1000]]) {
+      await workspace.send('Emulation.setDeviceMetricsOverride', { width,height,deviceScaleFactor:1,mobile:false })
+      for (const theme of ['Terminal Style','DM Style','DM Style (Dark)','Markdown Style']) {
+        for (const [left,right] of [[true,true],[false,true],[true,false],[false,false]]) {
+          await workspace.evaluate(`globalThis.__heightCheck(${JSON.stringify(theme)},${left},${right})`)
+        }
+      }
+    }
+    await workspace.evaluate('globalThis.__heightCheck("Terminal Style",true,true)')
+    await workspace.evaluate('globalThis.__heightLong()')
+    await workspace.evaluate('globalThis.__independentScrollActions()')
+    await workspace.evaluate('globalThis.__backgroundCollectionLong()')
+    await workspace.evaluate('globalThis.__workspaceStop()')
+  } finally { await workspace.close() }
+})
+
+test('session context actions preserve the workspace and support pointer and keyboard interaction', { timeout: 60000 }, async () => {
+  const context = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try { await context.evaluate('globalThis.__contextCase()') }
+  finally { await context.close() }
+})
+
 test('workspace panels resize independently and retain mounted state at minimum, default and wide sizes', { timeout: 60000 }, async () => {
   const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
   // This emulates WebView DPI; native frame/work-area fit is verified separately in Tauri.
@@ -128,6 +162,7 @@ test('Session Navigator pages, hierarchy, badges, selection and Reload preserve 
 })
 
 for (const name of [
+  'empty theme guidance preserves text and gives every role and release state readable contrast',
   'constructor keeps breaks, entities, empty leaves and inert destinations',
   'all four themes preserve original semantic and table assertions and collapse',
   'attachment preserves subtree identity and cleans replacement and unmount listeners',
@@ -155,7 +190,7 @@ test('Both Refresh buttons load plain and compressed sessions and preserve Colle
   finally { await refreshHarness.close() }
 })
 
-test('Collection toolbar, notice layout, headers and page navigation preserve their contracts', { timeout: 60000 }, async () => {
+test('Collection toolbar, notice layout, headers and panel navigation preserve their contracts', { timeout: 60000 }, async () => {
   const collectionHarness = await startClientHarness({
     entry: fileURLToPath(new URL('./helpers/collection-ui-client.ts', import.meta.url)).replaceAll('\\', '/'),
   })

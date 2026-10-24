@@ -50,28 +50,28 @@
 </script>
 
 <div
-  class="chat-transcript"
+  class="transcript-presentation chat-transcript"
   data-chat-theme={theme === 'DM Style (Dark)' ? 'dark' : 'light'}
+  data-empty={!isLoaded}
   aria-label={`${theme} transcript`}
 >
   <header class="chat-transcript-header">
     <div>
-      <strong>Session Observatory</strong>
-      <span>{theme}</span>
+      <span class="chat-theme-label">{theme}</span>
     </div>
     {#if !isLoaded}
-      <div class="chat-empty-state">
-        <p>Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.</p>
-        <p>
+      <div class="transcript-empty-state chat-empty-state">
+        <p class="empty-intro">Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.</p>
+        <p class="empty-provenance">
           Cosmic Horizon Archive
           <a href={COSMIC_HORIZON_URL} onclick={visitCosmicHorizon}>[Visit]</a>
         </p>
         {#if publicReleaseStatus !== null}
-          <p><UpdateNotice releaseStatus={publicReleaseStatus} presentation="chat" /></p>
+          <p class="empty-version"><UpdateNotice releaseStatus={publicReleaseStatus} presentation="chat" /></p>
         {/if}
-        <p>Select a local JSONL session to begin.</p>
-        <p class="chat-empty-metadata">Current theme: {theme}</p>
-        <p>Ready.</p>
+        <p class="empty-selection">Select a local JSONL session to begin.</p>
+        <p class="empty-metadata chat-empty-metadata">Current theme: {theme}</p>
+        <p class="empty-ready">Ready.</p>
       </div>
     {/if}
   </header>

@@ -1,11 +1,76 @@
-.terminal-panel {
+/* Theme values describe presentation; the workspace owns scroll geometry. */
+[data-theme='Terminal Style'] {
+  --transcript-surface: #141414;
+  --transcript-ink: #e6e6e6;
+  --transcript-border: #303030;
+  --transcript-content-padding: 18px;
+  --transcript-scheme: dark;
+  --transcript-thumb: #a6adba;
+}
+[data-theme='Markdown Style'] {
+  --transcript-surface: #f4f1ea;
+  --transcript-ink: #25272d;
+  --transcript-border: #d9dce1;
+  --transcript-content-padding: 30px clamp(18px, 5vw, 72px);
+  --transcript-scheme: light;
+  --transcript-thumb: #696f7a;
+  --idle-intro: #4c3929;
+  --idle-text: #494237;
+  --idle-muted: #6f6252;
+  --idle-link: #276b73;
+  --idle-selection: #276b73;
+  --idle-ready: #2f6f4e;
+  --idle-update: #76520f;
+  --idle-development: #76520f;
+}
+[data-theme='DM Style'] {
+  --transcript-surface: #edf0f5;
+  --transcript-ink: #25272d;
+  --transcript-border: #d9dce1;
+  --transcript-content-padding: 18px;
+  --transcript-scheme: light;
+  --transcript-thumb: #696f7a;
+  --idle-intro: #253b57;
+  --idle-text: #3e4856;
+  --idle-muted: #596579;
+  --idle-link: #2563a9;
+  --idle-selection: #205a9b;
+  --idle-ready: #286443;
+  --idle-update: #76520f;
+  --idle-development: #68509b;
+}
+[data-theme='DM Style (Dark)'] {
+  --transcript-surface: #17191d;
+  --transcript-ink: #e6e6e6;
+  --transcript-border: #343840;
+  --transcript-content-padding: 18px;
+  --transcript-scheme: dark;
+  --transcript-thumb: #a6adba;
+  --idle-intro: #f0ecff;
+  --idle-text: #d1d6de;
+  --idle-muted: #a7afbd;
+  --idle-link: #c4b5fd;
+  --idle-selection: #c4b5fd;
+  --idle-ready: #91d7a3;
+  --idle-update: #f3cb82;
+  --idle-development: #d8bd82;
+}
+[data-theme='Terminal Style'], [data-theme='DM Style (Dark)'] {
+  --panel-control-bg: #f7f8fa;
+  --panel-control-fg: #303844;
+  --panel-control-hover: #e2e8f0;
+}
+[data-theme='Markdown Style'], [data-theme='DM Style'] {
+  --panel-control-bg: #eceff3;
+  --panel-control-fg: #3f4856;
+  --panel-control-hover: #dde3eb;
+}
+
+.transcript-presentation {
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid #303030;
-  border-radius: 4px;
-  padding: 0;
-  border-color: #303030;
-  background: #141414;
+  padding: var(--transcript-content-padding);
+  color: var(--transcript-ink);
+  background: var(--transcript-surface);
 }
 
 .conversation-reference {
@@ -51,22 +116,6 @@
   overflow-wrap: anywhere;
 }
 
-.theme-panel {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel);
-}
-
-.markdown-transcript {
-  min-height: max(520px, calc(100svh - 260px));
-  overflow: auto;
-  padding: 30px clamp(18px, 5vw, 72px);
-  color: #25272d;
-  background: #f4f1ea;
-}
-
 .markdown-document-header,
 .markdown-blocks,
 .markdown-notice {
@@ -74,30 +123,24 @@
   margin-inline: auto;
 }
 
-.markdown-empty-state {
+.transcript-empty-state {
   display: grid;
   gap: 8px;
-  margin-top: 18px;
-  color: #3f3a33;
+  color: var(--idle-text);
   font-size: 14px;
+  line-height: 1.6;
 }
-
-.markdown-empty-state a {
-  color: #276b73;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.markdown-empty-state a:hover,
-.markdown-empty-state a:focus-visible {
-  text-decoration: underline;
-}
-
-.markdown-empty-metadata {
-  color: #6f6252;
-  font-family: var(--mono);
-  font-size: 12px;
-}
+.transcript-empty-state .empty-intro { color: var(--idle-intro); font-weight: 600; }
+.transcript-empty-state .empty-selection { color: var(--idle-selection); font-weight: 600; }
+.transcript-empty-state .empty-metadata { color: var(--idle-muted); font-size: 12px; }
+.transcript-empty-state .empty-ready { color: var(--idle-ready); font-weight: 600; }
+.transcript-empty-state a { color: var(--idle-link); font-weight: 700; text-decoration: none; }
+.transcript-empty-state a:hover, .transcript-empty-state a:focus-visible { text-decoration: underline; }
+.transcript-empty-state .update-notice { color: var(--idle-update); }
+.transcript-empty-state .update-notice[data-status='current'] { color: var(--idle-ready); }
+.transcript-empty-state .update-notice[data-status='development'] { color: var(--idle-development); }
+.markdown-empty-state { margin-top: 18px; }
+.markdown-empty-metadata { font-family: var(--mono); }
 
 .markdown-document-header {
   border-bottom: 1px solid #c9c3b7;
@@ -185,17 +228,6 @@
   font-family: var(--mono);
 }
 
-.chat-transcript {
-  min-height: max(520px, calc(100svh - 260px));
-  overflow: auto;
-  padding: 18px;
-  background: #edf0f5;
-}
-
-.chat-transcript[data-chat-theme='dark'] {
-  background: #17191d;
-}
-
 .chat-transcript-header,
 .chat-blocks,
 .chat-notice {
@@ -204,9 +236,7 @@
 }
 
 .chat-transcript-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   border-bottom: 1px solid #ccd1da;
   padding: 4px 4px 14px;
   color: #30343b;
@@ -217,41 +247,19 @@
   color: #f0f1f3;
 }
 
-.chat-empty-state {
-  display: grid;
-  gap: 5px;
-  max-width: 620px;
-  margin-top: 10px;
-}
-
-.chat-empty-state a {
-  color: #2563a9;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.chat-empty-state a:hover,
-.chat-empty-state a:focus-visible {
-  text-decoration: underline;
-}
-
-.chat-empty-metadata {
-  font-family: var(--mono);
-}
-
-.chat-transcript[data-chat-theme='dark'] .chat-empty-state a {
-  color: #bca7ff;
-}
+.chat-empty-state { max-width: 620px; margin-top: 10px; }
+.chat-empty-metadata { font-family: var(--mono); }
 
 .chat-transcript-header div {
   display: grid;
 }
 
-.chat-transcript-header span,
-.chat-transcript-header p {
+.chat-theme-label {
   color: #727987;
   font-size: 12px;
 }
+.chat-transcript[data-empty='true'] .chat-theme-label { color: var(--idle-intro); font-weight: 600; }
+.markdown-transcript[data-empty='true'] .markdown-kicker { color: var(--idle-intro); }
 
 .chat-blocks {
   display: grid;
@@ -342,11 +350,6 @@
 }
 
 .terminal-transcript {
-  min-height: max(520px, calc(100svh - 260px));
-  overflow: auto;
-  padding: 18px;
-  color: #e6e6e6;
-  background: #141414;
   font: 14px/1.5 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -403,14 +406,6 @@
 
 .terminal-transcript .update-notice[data-status='development'] {
   color: #c5a3ff;
-}
-
-.chat-transcript[data-chat-theme='dark'] .update-notice[data-status='current'] {
-  color: #91d7a3;
-}
-
-.chat-transcript[data-chat-theme='dark'] .update-notice[data-status='development'] {
-  color: #d8bd82;
 }
 
 .terminal-transcript .update-notice a {
@@ -581,9 +576,6 @@
     width: 92%;
   }
 
-  .terminal-transcript {
-    min-height: 480px;
-  }
 }
 
 /* Message semantics are shared; typography belongs to the selected presentation. */

@@ -20,7 +20,6 @@
     sessionsOpen: boolean
     onToggleSessions: () => void
     onToggleCollection: () => void
-    onScrollBottom: () => void
     isExportingWorklog: boolean
     actionStatusMessage: string
     errorMessage: string | null
@@ -45,7 +44,6 @@
     sessionsOpen,
     onToggleSessions,
     onToggleCollection,
-    onScrollBottom,
     isExportingWorklog,
     actionStatusMessage,
     errorMessage,
@@ -226,18 +224,6 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M15 4v16M18 8h1M18 12h1M18 16h1" />
-      </svg>
-    </button>
-    <button
-      type="button"
-      class="toolbar-icon-button"
-      aria-label="Scroll to Bottom"
-      title="Scroll to Bottom"
-      disabled={status !== 'loaded'}
-      onclick={onScrollBottom}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 3v12m-5-5 5 5 5-5M4 20h16" />
       </svg>
     </button>
     </div>

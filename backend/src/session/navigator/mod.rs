@@ -403,6 +403,77 @@ impl NavigatorService {
         };
         Ok(page(&request.snapshot_id, &snapshot, offset))
     }
+
+    /// Resolve only a published entry, then inspect the current read-only source again.
+    pub fn resolve_target(&self, request: NavigatorTargetRequestDto) -> ApiResult<PathBuf> {
+        let snapshot = self.snapshot(&request.snapshot_id)?;
+        let item = snapshot
+            .items
+            .iter()
+            .find(|item| item.entry_key == request.entry_key)
+            .ok_or_else(|| {
+                error(
+                    "navigator_entry_missing",
+                    "The session is not in this snapshot. Reload Sessions.",
+                )
+            })?;
+        let root = Path::new(&snapshot.sessions_root);
+        let candidate = source::resolve_path(Path::new(&item.path)).map_err(|_| {
+            error(
+                "navigator_source_unavailable",
+                "The session file is unavailable. Reload Sessions.",
+            )
+        })?;
+        // Reject replaced directories as well as links at the leaf itself.
+        let mut ancestor = Some(candidate.as_path());
+        while let Some(path) = ancestor {
+            if !path.starts_with(root) || is_link(path) {
+                return Err(error(
+                    "navigator_source_changed",
+                    "The session path has changed. Reload Sessions.",
+                ));
+            }
+            if path == root {
+                break;
+            }
+            ancestor = path.parent();
+        }
+        let path = fs::canonicalize(&candidate).map_err(|_| {
+            error(
+                "navigator_source_unavailable",
+                "The session file is unavailable. Reload Sessions.",
+            )
+        })?;
+        if !path.starts_with(root) {
+            return Err(error(
+                "navigator_source_changed",
+                "The session path has changed. Reload Sessions.",
+            ));
+        }
+        let inspection = source::open_reader(&path)
+            .and_then(inspect_reader)
+            .map_err(|_| {
+                error(
+                    "navigator_source_unavailable",
+                    "The session file could not be inspected.",
+                )
+            })?;
+        let id = inspection
+            .identity
+            .as_ref()
+            .and_then(|identity| identity.thread_id.as_ref());
+        if id != item.thread_id.as_ref()
+            || inspection.classification == SessionClassification::GuardianReview
+        {
+            return Err(error(
+                "navigator_source_changed",
+                "The session identity has changed. Reload Sessions.",
+            ));
+        }
+        // A concurrent Reload must not authorize an action on an expired entry.
+        self.snapshot(&request.snapshot_id)?;
+        Ok(path)
+    }
     pub fn hierarchy(
         &self,
         request: HierarchicalSessionsRequestDto,

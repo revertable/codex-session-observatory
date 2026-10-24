@@ -78,6 +78,108 @@ fn flat_request(id: &str, cursor: Option<String>) -> FlatSessionsRequestDto {
         cursor,
     }
 }
+
+#[test]
+fn context_targets_revalidate_identity_formats_and_snapshot_without_changing_the_list() {
+    let f = Fixture::new();
+    let plain = f.session("sessions/2026/10/01/a.jsonl", "one", "user");
+    let compressed = f.session("sessions/2026/10/01/b.jsonl.zst", "two", "chatgpt_handoff");
+    let service = NavigatorService::default();
+    let page = service
+        .install(service.begin_reload(), collect_snapshot(&f.0).unwrap())
+        .unwrap();
+    let target = |key: &str| NavigatorTargetRequestDto {
+        snapshot_id: page.snapshot_id.clone(),
+        entry_key: key.into(),
+    };
+    assert_eq!(
+        service.resolve_target(target("thread:one")).unwrap(),
+        fs::canonicalize(&plain).unwrap()
+    );
+    assert_eq!(
+        service.resolve_target(target("thread:two")).unwrap(),
+        fs::canonicalize(&compressed).unwrap()
+    );
+    assert_eq!(
+        service
+            .resolve_target(target("thread:missing"))
+            .unwrap_err()
+            .error
+            .code,
+        "navigator_entry_missing"
+    );
+    f.session("sessions/2026/10/01/a.jsonl.zst", "one", "user");
+    fs::remove_file(&plain).unwrap();
+    assert!(
+        service
+            .resolve_target(target("thread:one"))
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".jsonl.zst")
+    );
+    f.session("sessions/2026/10/01/a.jsonl", "replacement", "user");
+    assert_eq!(
+        service
+            .resolve_target(target("thread:one"))
+            .unwrap_err()
+            .error
+            .code,
+        "navigator_source_changed"
+    );
+    fs::remove_file(&compressed).unwrap();
+    assert_eq!(
+        service
+            .resolve_target(target("thread:two"))
+            .unwrap_err()
+            .error
+            .code,
+        "navigator_source_unavailable"
+    );
+    assert_eq!(
+        service.flat(flat_request(&page.snapshot_id, None)).unwrap(),
+        page
+    );
+    service
+        .install(service.begin_reload(), collect_snapshot(&f.0).unwrap())
+        .unwrap();
+    assert_eq!(
+        service
+            .resolve_target(target("thread:one"))
+            .unwrap_err()
+            .error
+            .code,
+        "navigator_snapshot_expired"
+    );
+}
+
+#[test]
+fn context_target_rejects_replaced_guardian_and_non_file_sources() {
+    let f = Fixture::new();
+    let path = f.session("sessions/a.jsonl", "one", "user");
+    let service = NavigatorService::default();
+    let page = service
+        .install(service.begin_reload(), collect_snapshot(&f.0).unwrap())
+        .unwrap();
+    let request = NavigatorTargetRequestDto {
+        snapshot_id: page.snapshot_id,
+        entry_key: "thread:one".into(),
+    };
+    f.session("sessions/a.jsonl", "one", "guardian_review");
+    assert_eq!(
+        service
+            .resolve_target(request.clone())
+            .unwrap_err()
+            .error
+            .code,
+        "navigator_source_changed"
+    );
+    fs::remove_file(&path).unwrap();
+    fs::create_dir(&path).unwrap();
+    assert_eq!(
+        service.resolve_target(request).unwrap_err().error.code,
+        "navigator_source_unavailable"
+    );
+}
 fn timestamp(value: &str) -> i64 {
     (time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .unwrap()

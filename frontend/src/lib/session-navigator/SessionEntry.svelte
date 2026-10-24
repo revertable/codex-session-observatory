@@ -3,12 +3,13 @@
   import { titleWeight } from './state'
   import { sessionTitlePresentation } from './title-presentation'
 
-  let { item, active, selecting, now, onSelect }: {
+  let { item, active, selecting, now, onSelect, onContext }: {
     item: SessionSummary
     active: boolean
     selecting: boolean
     now: number
     onSelect: (item: SessionSummary) => Promise<void>
+    onContext: (item: SessionSummary, x: number, y: number, anchor: HTMLButtonElement) => void
   } = $props()
   const id = $props.id()
   const presentation = $derived(sessionTitlePresentation(item))
@@ -46,13 +47,26 @@
   })
 </script>
 
-<div class="session-entry-row" class:active class:selecting>
+<div class="session-entry-row" role="group" class:active class:selecting
+  oncontextmenu={event => {
+    event.preventDefault()
+    const anchor = event.currentTarget.querySelector<HTMLButtonElement>('.session-entry')!
+    if (!selecting) onContext(item, event.clientX, event.clientY, anchor)
+  }}>
   <div class="session-title-line">
     <button type="button" class="session-entry" class:active
       aria-current={active ? 'true' : undefined}
+      aria-haspopup="menu"
       aria-describedby={`${id}-date`}
       disabled={selecting} title={presentation.title} data-entry-key={item.entry_key}
-      onclick={() => onSelect(item)}>
+      onclick={() => onSelect(item)}
+      onkeydown={event => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+          event.preventDefault(); event.stopPropagation()
+          const box = event.currentTarget.getBoundingClientRect()
+          onContext(item, box.left, box.bottom, event.currentTarget)
+        }
+      }}>
       <span class="session-title" style:font-weight={titleWeight(item.last_conversation_at_ms, now)}>{presentation.title}</span>
     </button>
     {#if presentation.info}

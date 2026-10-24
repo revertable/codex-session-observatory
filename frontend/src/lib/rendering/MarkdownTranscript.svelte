@@ -49,23 +49,22 @@
   }
 </script>
 
-<div class="markdown-transcript" aria-label="Markdown transcript">
+<div class="transcript-presentation markdown-transcript" data-empty={!isLoaded} aria-label="Markdown transcript">
   <header class="markdown-document-header">
     <p class="markdown-kicker">Markdown Style</p>
-    <h2>Session Observatory</h2>
     {#if !isLoaded}
-      <div class="markdown-empty-state">
-        <p>Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.</p>
-        <p>
+      <div class="transcript-empty-state markdown-empty-state">
+        <p class="empty-intro">Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.</p>
+        <p class="empty-provenance">
           Cosmic Horizon Archive
           <a href={COSMIC_HORIZON_URL} onclick={visitCosmicHorizon}>[Visit]</a>
         </p>
         {#if publicReleaseStatus !== null}
-          <p><UpdateNotice releaseStatus={publicReleaseStatus} presentation="markdown" /></p>
+          <p class="empty-version"><UpdateNotice releaseStatus={publicReleaseStatus} presentation="markdown" /></p>
         {/if}
-        <p>Select a local JSONL session to begin.</p>
-        <p class="markdown-empty-metadata">Current theme: {theme}</p>
-        <p>Ready.</p>
+        <p class="empty-selection">Select a local JSONL session to begin.</p>
+        <p class="empty-metadata markdown-empty-metadata">Current theme: {theme}</p>
+        <p class="empty-ready">Ready.</p>
       </div>
     {/if}
   </header>

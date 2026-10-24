@@ -45,3 +45,5 @@ export interface NavigatorApi {
   flat(snapshot: string, cursor: string): Promise<SessionPage>
   hierarchy(snapshot: string): Promise<SessionHierarchy>
 }
+
+export interface NavigatorTarget { snapshot_id: string; entry_key: string }

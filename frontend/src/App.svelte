@@ -17,13 +17,18 @@
     parseSelectedJsonl,
     selectJsonlPath,
     selectWorklogParentDirectory,
+    resolveNavigatorSession,
+    exportNavigatorWorklog,
   } from './lib/tauri-bridge'
   import SessionHeader from './lib/control-room/SessionHeader.svelte'
   import SpecializedSessionPanel from './lib/control-room/SpecializedSessionPanel.svelte'
   import TranscriptActions from './lib/control-room/TranscriptActions.svelte'
+  import { cancelPanelScroll } from './lib/control-room/panel-scroll'
+  import PanelScrollActions from './lib/control-room/PanelScrollActions.svelte'
   import AppLayout from './lib/control-room/AppLayout.svelte'
   import SessionNavigator from './lib/session-navigator/SessionNavigator.svelte'
-  import type { SessionSummary } from './lib/session-navigator/contract'
+  import type { SessionSummary, NavigatorTarget } from './lib/session-navigator/contract'
+  import type { ExportWorklogResponse } from './lib/worklog-contract'
   import { sessionPathKey } from './lib/session-navigator/state'
   import TranscriptViewer from './lib/rendering/TranscriptViewer.svelte'
   import CollectionPanel from './lib/collection/CollectionPanel.svelte'
@@ -34,7 +39,6 @@
   import { serializeTranscript } from './lib/rendering/transcript-capture'
   import { transcriptScopeChanged } from './lib/rendering/transcript-scope'
   import {
-    renderPathForTheme,
     type TranscriptThemeName,
   } from './lib/rendering/transcript-themes'
   import type { ApiErrorDto } from './lib/parse-contract'
@@ -52,6 +56,7 @@
   let publicReleaseStatus: PublicReleaseStatus | null = null
   let collection = createCollectionState()
   let sessionsOpen = true
+  let transcriptViewport: HTMLElement | undefined
   let loadGeneration = 0
   $: messageIds = identifyMessages(
     workflow.selected_file.path,
@@ -72,6 +77,10 @@
   }
 
   function selectJsonl(path: string) {
+    if (sessionPathKey(workflow.selected_file.path) !== sessionPathKey(path)) {
+      cancelPanelScroll(transcriptViewport)
+      if (transcriptViewport) transcriptViewport.scrollTop = 0
+    }
     loadGeneration++
     collection = collectionForSelectedPath(collection, workflow.selected_file.path, path)
     replaceWorkflow(selectPath(workflow, path))
@@ -100,6 +109,7 @@
 
     return () => {
       active = false
+      cancelPanelScroll(transcriptViewport)
     }
   })
 
@@ -255,43 +265,6 @@
     }
   }
 
-  function scrollPageToTop() {
-    scrollPageTo(0)
-  }
-
-  function scrollPageToBottom() {
-    const page = document.scrollingElement ?? document.documentElement
-    scrollPageTo(Math.max(0, page.scrollHeight - window.innerHeight))
-  }
-
-  function scrollPageTo(targetY: number) {
-    const startY = window.scrollY
-
-    if (startY === targetY) {
-      return
-    }
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      window.scrollTo(0, targetY)
-      return
-    }
-
-    const duration = 200
-    const startedAt = performance.now()
-
-    function step(now: number) {
-      const progress = Math.min((now - startedAt) / duration, 1)
-      const easedProgress = 1 - Math.pow(1 - progress, 3)
-      window.scrollTo(0, startY + (targetY - startY) * easedProgress)
-
-      if (progress < 1) {
-        requestAnimationFrame(step)
-      }
-    }
-
-    requestAnimationFrame(step)
-  }
-
   async function handleExportWorklog() {
     const metadata = workflow.loaded_file.metadata
 
@@ -304,17 +277,34 @@
       return
     }
 
+    await runWorklogExport(() => Promise.resolve(metadata.absolute_path),
+      parent => exportWorklog(metadata.absolute_path, parent))
+  }
+
+  async function handleNavigatorExport(target: NavigatorTarget): Promise<void> {
+    if (isExportingWorklog) return
+    return runWorklogExport(() => resolveNavigatorSession(target), parent => exportNavigatorWorklog(target, parent), true)
+  }
+
+  async function runWorklogExport(resolveSource: () => Promise<string>, perform: (parent: string) => Promise<ExportWorklogResponse>, rejectError = false): Promise<void> {
     isExportingWorklog = true
 
     try {
-      const parentDirectory = await selectWorklogParentDirectory(metadata.absolute_path)
+      const path = await resolveSource()
+      const parentDirectory = await selectWorklogParentDirectory(path)
       if (parentDirectory === null) {
-        actionStatusMessage = 'Export cancelled.'
+        if (!rejectError) actionStatusMessage = 'Export cancelled.'
         return
       }
 
-      actionStatusMessage = 'Exporting worklog…'
-      const result = await exportWorklog(metadata.absolute_path, parentDirectory)
+      if (!rejectError) actionStatusMessage = 'Exporting worklog…'
+      const result = await perform(parentDirectory)
+      if (rejectError) {
+        if (!result.folder_opened) throw new Error(result.refreshed
+          ? 'Worklog refreshed, but folder could not be opened.'
+          : 'Worklog exported, but folder could not be opened.')
+        return
+      }
       if (!result.folder_opened) {
         actionStatusMessage = result.refreshed
           ? 'Worklog refreshed, but folder could not be opened.'
@@ -326,6 +316,7 @@
       }
     } catch (error) {
       const apiError = normalizeLoadError(error)
+      if (rejectError) throw apiError
       actionStatusMessage =
         apiError.code === 'target_not_safe_to_overwrite'
           ? 'Target not safe to overwrite.'
@@ -418,7 +409,6 @@
     {sessionsOpen}
     onToggleSessions={() => { sessionsOpen = !sessionsOpen }}
     onToggleCollection={() => { collection = { ...collection, isOpen: !collection.isOpen } }}
-    onScrollBottom={scrollPageToBottom}
     {isExportingWorklog}
     {actionStatusMessage}
     errorMessage={workflow.error?.message ?? null}
@@ -431,20 +421,31 @@
     onThemeChange={handleThemeChange}
   />
 
-  <AppLayout collectionOpen={collection.isOpen} {sessionsOpen}>
+  <AppLayout collectionOpen={collection.isOpen} {sessionsOpen} theme={selectedTheme}>
   {#snippet navigator()}
     <SessionNavigator selectedPath={workflow.selected_file.path}
       selectedThreadId={workflow.loaded_file.session?.identity?.thread_id ?? null}
       theme={selectedTheme}
+      visible={sessionsOpen}
       selecting={workflow.status === 'loading' || isExportingWorklog || isLocatingParentSession}
-      onSelect={selectNavigatorSession} />
+      onSelect={selectNavigatorSession} onExport={handleNavigatorExport} />
   {/snippet}
   {#snippet transcript()}
-  <section class="terminal-section" aria-label="Transcript view">
+  <TranscriptActions
+    status={workflow.status}
+    hasSelectedPath={workflow.selected_file.path.trim() !== ''}
+    canCaptureTranscript={workflow.loaded_file.session?.capabilities.can_show_transcript === true}
+    actionStatusMessage={transcriptActionStatusMessage}
+    onCapture={captureTranscript}
+    onRefresh={loadSelectedJsonl}
+  />
+  <section class="transcript-body" aria-label="Transcript view">
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable content must be keyboard focusable.) -->
     <article
-      class:terminal-panel={renderPathForTheme(selectedTheme) === 'terminal'}
-      class:theme-panel={renderPathForTheme(selectedTheme) !== 'terminal'}
+      bind:this={transcriptViewport}
+      class="transcript-viewport panel-scroll" role="region" tabindex="0" aria-label="Transcript content"
     >
+      <div class="transcript-content">
       {#if workflow.loaded_file.session !== null && isSpecializedSession(workflow.loaded_file.session)}
         <SpecializedSessionPanel
           session={workflow.loaded_file.session}
@@ -466,18 +467,11 @@
           onToggleCollection={toggleCollection}
         />
       {/if}
+      </div>
     </article>
   </section>
 
-  <TranscriptActions
-    status={workflow.status}
-    hasSelectedPath={workflow.selected_file.path.trim() !== ''}
-    canCaptureTranscript={workflow.loaded_file.session?.capabilities.can_show_transcript === true}
-    actionStatusMessage={transcriptActionStatusMessage}
-    onCapture={captureTranscript}
-    onTop={scrollPageToTop}
-    onRefresh={loadSelectedJsonl}
-  />
+  <PanelScrollActions viewport={transcriptViewport} label="Transcript" disabled={workflow.status !== 'loaded'} />
   {/snippet}
   {#snippet panel()}
     <CollectionPanel items={collection.items} theme={selectedTheme}

@@ -48,7 +48,38 @@ function semanticAssertions(root: HTMLElement) {
     assert(root.querySelector('.technical-message-content')?.textContent === '**technical**', 'technical stays plain');
     inert(root);
 }
+function contrast(foreground: string, background: string) {
+    const luminance = (color: string) => color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const a = luminance(foreground), b = luminance(background);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
 const cases: Record<string, () => Promise<void>> = {
+    async 'empty theme guidance preserves text and gives every role and release state readable contrast'() {
+        for (const [theme, component] of themes.slice(1)) {
+            target.dataset.theme = theme;
+            for (const status of ['current', 'development', 'update-available']) {
+                const props = { theme, isLoaded: false, publicReleaseStatus: { status, currentVersion: '1.3.0', latestVersion: '1.4.0' }, showIdentityNote: true, observedEventCounts: [], blocks: [], references: [], collapsedBlocks: {}, collectedBlocks: [], onToggleBlock: () => {}, onToggleCollection: () => {} };
+                const instance = mount(Host, { target, props: { component: component as any, props } });
+                try {
+                    await settle();
+                    const surface = target.querySelector<HTMLElement>('.transcript-presentation')!;
+                    const empty = surface.querySelector('.transcript-empty-state')!;
+                    assert(empty.querySelector('.empty-intro')?.textContent === 'Codex Session Observatory is built from the Cosmic Horizon approach to observable AI-assisted work.', 'intro text preserved');
+                    assert(empty.querySelector('.empty-selection')?.textContent === 'Select a local JSONL session to begin.' && empty.querySelector('.empty-ready')?.textContent === 'Ready.', 'selection and Ready text preserved');
+                    assert(empty.querySelector('.empty-metadata')?.textContent === 'Current theme: ' + theme, 'theme text preserved');
+                    const intro = getComputedStyle(empty.querySelector('.empty-intro')!), metadata = getComputedStyle(empty.querySelector('.empty-metadata')!);
+                    assert(intro.color !== metadata.color && Number(intro.fontWeight) > Number(metadata.fontWeight), 'intro and metadata have distinct hierarchy');
+                    for (const text of empty.querySelectorAll('p, a, .update-notice')) {
+                        assert(contrast(getComputedStyle(text).color, getComputedStyle(surface).backgroundColor) >= 4.5, theme + ' ' + status + ': readable text and links');
+                    }
+                    assert(empty.querySelector('.update-notice')?.getAttribute('data-status') === status, 'existing release state preserved');
+                } finally { await unmount(instance); target.replaceChildren(); }
+            }
+        }
+    },
     async 'constructor keeps breaks, entities, empty leaves and inert destinations'() {
         for (const [input, expected] of [['first\nsecond', 'first\nsecond'], ['first  \nsecond', 'first\nsecond'], [code('CONFIG=9000') + ' &#x20;\nApply', 'CONFIG=9000  \nApply'], ['<tag> > & &amp; &#x20; &madeup;', '<tag> > & &   &madeup;'], [code('&amp; &#x20; <tag>'), '&amp; &#x20; <tag>'], ['\\&amp;', '&amp;']]) {
             const host = document.createElement('div');
@@ -72,6 +103,7 @@ const cases: Record<string, () => Promise<void>> = {
     },
     async 'all four themes preserve original semantic and table assertions and collapse'() {
         for (const [theme, component] of themes) {
+            target.dataset.theme = theme;
             target.replaceChildren();
             const blocks = [block(source), block('**technical**', 'tool_result'), block(tableSource)];
             let collapsedBlocks: Record<number, boolean> = {};

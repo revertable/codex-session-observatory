@@ -55,6 +55,56 @@ async fn list_sessions_hierarchy(
         .map_err(navigator_task_error)?
 }
 
+#[tauri::command]
+async fn resolve_navigator_session(
+    state: tauri::State<'_, NavigatorState>,
+    request: NavigatorTargetRequestDto,
+) -> api::ApiResult<String> {
+    let service = Arc::clone(&state.inner().0);
+    tauri::async_runtime::spawn_blocking(move || {
+        service
+            .resolve_target(request)
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(navigator_task_error)?
+}
+
+#[tauri::command]
+async fn open_navigator_containing_folder(
+    state: tauri::State<'_, NavigatorState>,
+    request: NavigatorTargetRequestDto,
+) -> api::ApiResult<()> {
+    let service = Arc::clone(&state.inner().0);
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = service.resolve_target(request)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| navigator_task_error("Session folder is unavailable."))?;
+        tauri_plugin_opener::open_path(parent, None::<&str>).map_err(|error| {
+            api::ErrorResponseDto::new("navigator_folder_open_failed", error.to_string())
+        })
+    })
+    .await
+    .map_err(navigator_task_error)?
+}
+
+#[tauri::command]
+async fn export_navigator_worklog(
+    state: tauri::State<'_, NavigatorState>,
+    request: NavigatorTargetRequestDto,
+    parent_directory: String,
+) -> api::ApiResult<ExportWorklogResponse> {
+    let service = Arc::clone(&state.inner().0);
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = service.resolve_target(request)?;
+        export_worklog(path.to_string_lossy().into_owned(), parent_directory)
+            .map_err(|error| api::ErrorResponseDto::new(error.error.code, error.error.message))
+    })
+    .await
+    .map_err(navigator_task_error)?
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct TauriFilterDto {
     show_you: bool,
@@ -215,6 +265,9 @@ pub fn run() {
             reload_session_navigator,
             list_sessions_flat,
             list_sessions_hierarchy,
+            resolve_navigator_session,
+            open_navigator_containing_folder,
+            export_navigator_worklog,
             export_worklog,
             locate_parent_session,
             parse_selected_jsonl,

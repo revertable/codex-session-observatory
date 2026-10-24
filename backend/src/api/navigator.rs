@@ -69,6 +69,12 @@ pub struct HierarchicalSessionsRequestDto {
     pub snapshot_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct NavigatorTargetRequestDto {
+    pub snapshot_id: String,
+    pub entry_key: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct SessionDayDto {
     pub day: u8,
