@@ -5,6 +5,7 @@
   import type { TranscriptThemeName } from '../rendering/transcript-themes'
   import { useStatus } from '../control-room/status-context'
   import PanelScrollActions from '../control-room/PanelScrollActions.svelte'
+  import { collectionTextParts } from './content-typography.ts'
 
   interface Props {
     items: readonly CollectedMessage[]
@@ -59,7 +60,7 @@
                 <strong>{collectionRoleLabel(item.block)}</strong>
                 {#if timestamp !== null}<time class="collection-timestamp" datetime={timestamp.datetime} title={`Original timestamp: ${timestamp.datetime}`}>· {timestamp.label}</time>{/if}
               </header>
-              <pre>{item.block.content}</pre>
+              <pre>{#each collectionTextParts(item.block) as part}<span class:collection-code={part.code}>{part.text}</span>{/each}</pre>
             </article>
           </li>
         {/each}

@@ -143,7 +143,7 @@
 .transcript-empty-state .update-notice[data-status='current'] { color: var(--idle-ready); }
 .transcript-empty-state .update-notice[data-status='development'] { color: var(--idle-development); }
 .markdown-empty-state { margin-top: 18px; }
-.markdown-empty-metadata { font-family: var(--mono); }
+.markdown-empty-metadata { font-family: var(--user-text-font, var(--default-mono)); }
 
 .markdown-document-header {
   border-bottom: 1px solid #c9c3b7;
@@ -151,7 +151,7 @@
 }
 
 .markdown-document-header h2 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--user-text-font, Georgia, 'Times New Roman', serif);
   font-size: clamp(28px, 4vw, 40px);
 }
 
@@ -206,7 +206,7 @@
 }
 
 .markdown-block-toggle strong {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--user-text-font, Georgia, 'Times New Roman', serif);
   font-size: 17px;
 }
 
@@ -243,7 +243,7 @@
 }
 
 .chat-empty-state { margin-top: 10px; }
-.chat-empty-metadata { font-family: var(--mono); }
+.chat-empty-metadata { font-family: var(--user-text-font, var(--default-mono)); }
 
 .chat-transcript-header div {
   display: grid;
@@ -274,10 +274,10 @@
 
 .chat-block[data-family='you'] {
   justify-self: end;
-  border-color: #3576d3;
+  border-color: #3373cc;
   border-radius: 16px 16px 4px;
   color: #ffffff;
-  background: #3576d3;
+  background: #3373cc;
 }
 
 .chat-block[data-family='meta'],
@@ -344,7 +344,7 @@
 }
 
 .terminal-transcript {
-  font: 14px/1.5 var(--mono);
+  font: 14px/1.5 var(--user-text-font, var(--default-mono));
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -373,10 +373,14 @@
 .transcript-block-timestamp {
   margin-left: auto;
   color: currentColor;
-  font: 500 11px/1.4 var(--mono);
+  font: 500 11px/1.4 var(--user-text-font, var(--default-mono));
   opacity: 0.68;
   white-space: nowrap;
 }
+
+/* Preserve metadata hierarchy through size and weight, without fading DM text
+   below AA contrast on the different speaker surfaces. */
+.chat-transcript .transcript-block-timestamp { opacity: 1; }
 
 .update-notice[data-status='current'] {
   color: #2f6f4e;
@@ -502,7 +506,7 @@
   padding: 0;
   color: #878787;
   background: transparent;
-  font: 700 14px/1.5 var(--mono);
+  font: 700 14px/1.5 var(--user-text-font, var(--default-mono));
   text-align: left;
 }
 
@@ -596,7 +600,7 @@
 }
 .message-content a { color: inherit; text-decoration: underline; cursor: pointer; }
 .message-content a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.terminal-block .message-content { font: 14px/1.5 var(--mono); }
+.terminal-block .message-content { font: 14px/1.5 var(--user-text-font, var(--default-mono)); }
 .terminal-block .message-inline-code { color: #ffc46b; }
 .message-link-error { font-size: 0.85em; }
 
@@ -627,9 +631,17 @@
   border-color: #414954;
 }
 
+.chat-transcript .message-content .message-inline-code {
+  color: #17324d;
+  background: #e8f0ff;
+  border: 1px solid #b7c9dc;
+  font-size: 14px;
+}
+
 .chat-transcript[data-chat-theme='dark'] .message-content .message-inline-code {
   color: #e7f1f5;
   background: #25343d;
+  border-color: #536773;
 }
 
 /* Tables share semantics while their colors follow the surrounding theme. */

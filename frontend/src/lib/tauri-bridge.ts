@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import type { SystemFont } from './control-room/font-preferences'
 import type { ApiErrorDto, ErrorResponseDto, FilterDto, ParseResponseDto } from './parse-contract'
 import type { LocateParentSessionResponse } from './parent-session-contract'
 import type { ExportWorklogResponse } from './worklog-contract'
@@ -18,6 +19,7 @@ export const sessionNavigatorApi: NavigatorApi = {
 }
 
 export const resolveNavigatorSession = (request: NavigatorTarget) => navigatorInvoke<string>('resolve_navigator_session', { request })
+export const listSystemFonts = () => navigatorInvoke<SystemFont[]>('list_system_fonts')
 export const openNavigatorContainingFolder = (request: NavigatorTarget) => navigatorInvoke<void>('open_navigator_containing_folder', { request })
 export const exportNavigatorWorklog = (request: NavigatorTarget, parentDirectory: string) =>
   navigatorInvoke<ExportWorklogResponse>('export_navigator_worklog', { request, parentDirectory })

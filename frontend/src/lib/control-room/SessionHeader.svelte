@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusLine from './StatusLine.svelte'
+  import FontSelectors from './FontSelectors.svelte'
   import { useStatus } from './status-context'
   import type { LoadStatus } from '../load-workflow'
   import type {
@@ -129,19 +130,42 @@
       <strong title={friendlySelectedPath}>{friendlySelectedPath}</strong>
     </div>
 
+    <div class="session-command-row">
     <dl class="selection-metadata">
       <div>
         <dt>Session ID</dt>
-        <dd>{metadata?.session_id ?? 'Not detected'}</dd>
+        <dd title={metadata?.session_id ?? 'Not detected'}>{metadata?.session_id ?? 'Not detected'}</dd>
       </div>
     </dl>
 
     <div class="resume-row panel-controls">
       <span>Resume command</span>
+      <code title={specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}>{specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}</code>
       <button type="button" class="toolbar-icon-button panel-icon-button" aria-label="Copy Resume Command" title="Copy Resume Command" disabled={session?.capabilities.can_resume !== true || metadata?.resume_command == null} onclick={onCopyResume}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H4v13h4" /></svg>
       </button>
-      <code title={specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}>{specializedPresentation?.resumeUnavailable ?? metadata?.resume_command ?? 'Not available'}</code>
+    </div>
+    </div>
+  </section>
+
+  <section class="appearance-row" aria-label="Appearance settings">
+    <h2 class="style-label">Style</h2>
+    <div class="appearance-controls">
+    <label class="theme-selector header-selector">
+      <span>Theme</span>
+      <span class="select-field">
+      <select aria-label="Theme"
+        value={selectedTheme}
+        onchange={(event) => onThemeChange(event.currentTarget.value as TranscriptThemeName)}
+      >
+        {#each transcriptThemes as theme}
+          <option value={theme}>{theme}</option>
+        {/each}
+      </select>
+      <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </span>
+    </label>
+    <FontSelectors />
     </div>
   </section>
 
@@ -164,17 +188,7 @@
       {/each}
     </div>
     <div class="view-controls panel-controls">
-    <label class="theme-selector">
-      <span>Theme</span>
-      <select
-        value={selectedTheme}
-        onchange={(event) => onThemeChange(event.currentTarget.value as TranscriptThemeName)}
-      >
-        {#each transcriptThemes as theme}
-          <option value={theme}>{theme}</option>
-        {/each}
-      </select>
-    </label>
+
     <button type="button" class="toolbar-icon-button panel-icon-button" aria-label="Export Worklog" title={specializedPresentation?.exportUnavailable ?? 'Export Worklog'} disabled={status !== 'loaded' || session?.capabilities.can_export_worklog !== true || isExportingWorklog} onclick={onExportWorklog}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg>
     </button>

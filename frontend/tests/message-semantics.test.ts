@@ -4,10 +4,30 @@ import { parseMessageMarkdown, messageSemantics } from '../src/lib/rendering/mes
 import type { MessageNode } from '../src/lib/rendering/message-semantics.ts'
 import { messagePlainText } from '../src/lib/rendering/message-plain-text.ts'
 import type { TranscriptBlockDto } from '../src/lib/parse-contract.ts'
+import { collectionTextParts } from '../src/lib/collection/content-typography.ts'
 
 const block = (content: string, entry_type: TranscriptBlockDto['entry_type'] = 'you'): TranscriptBlockDto =>
   ({ entry_type, label: '[YOU]', title: '[YOU]', timestamp: null, content })
 const walk = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap(node => [node, ...walk(node.children ?? [])])
+
+test('Collection typography separates prose, raw code and logs without rewriting source text', () => {
+  for (const newline of ['\n', '\r\n', '\r']) {
+    const text = ['일반 English **bold** `inline code`', '', '```ts', '  const value = "한글";  ', '```', '', '다음 문단', '', '    indented()', '', '| A | B |', '| --- | --- |', '| x | y |'].join(newline)
+    const parts = collectionTextParts(block(text))
+    assert.equal(parts.map(p => p.text).join(''), text)
+    assert.ok(parts.some(p => !p.code && p.text.includes('일반 English **bold**')))
+    assert.ok(parts.some(p => p.code && p.text === '`inline code`'))
+    assert.ok(parts.some(p => p.code && p.text.includes('```ts') && p.text.includes('  const value')))
+    assert.ok(parts.some(p => p.code && p.text.includes('    indented()')))
+    assert.ok(parts.some(p => p.code && p.text.includes('| A | B |')))
+  }
+  for (const kind of ['tool_call', 'tool_result'] as const) {
+    assert.deepEqual(collectionTextParts(block('  literal `text`\n\toutput  ', kind)), [{ text: '  literal `text`\n\toutput  ', code: true }])
+  }
+  for (const text of ['', 'plain paragraph', 'unmatched `code', '\\`escaped`', '`first\n\nsecond`', '`first\r\n\r\nsecond`']) {
+    assert.deepEqual(collectionTextParts(block(text)), [{ text, code: false }])
+  }
+})
 
 test('message semantics preserve newlines, entities, code, and multiple paragraphs', () => {
   const cases = [

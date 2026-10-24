@@ -13,7 +13,7 @@ const target = document.querySelector('#target') as HTMLElement;
 const assert = (condition: unknown, message: string) => { if (!condition)
     throw new Error(message); };
 const block = (content: string, entry_type = 'you') => ({ entry_type, content, label: '[YOU]', title: '[YOU]', timestamp: '2026-01-01T01:02:03Z' });
-const settle = async () => { flushSync(); await tick(); await new Promise(resolve => setTimeout(resolve, 0)); flushSync(); };
+const settle = async () => { flushSync(); await tick(); void document.body.offsetHeight; await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 0)); flushSync(); };
 const code = (text: string) => String.fromCharCode(96) + text + String.fromCharCode(96);
 const fence = String.fromCharCode(96).repeat(3);
 const opened: string[] = [];
@@ -57,6 +57,41 @@ function contrast(foreground: string, background: string) {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 const cases: Record<string, () => Promise<void>> = {
+    async 'DM inline code is readable in both speaker bubbles without changing other themes or fenced code'() {
+        const content = 'English 한글 **bold** ' + code('CONFIG=9000 이런 표현') + '\n\n' + fence + '\nconst value = 123;\n' + fence;
+        for (const [theme, component] of themes) {
+            target.dataset.theme = theme;
+            const props = { theme, isLoaded: true, publicReleaseStatus: null, showIdentityNote: false, observedEventCounts: [], blocks: [block(content), block(content, 'codex'), block('Tool call 한글', 'tool_call'), block('Tool result 한글', 'tool_result'), block('System 한글', 'system')], references: [], collapsedBlocks: {}, onToggleBlock: () => {} };
+            const capture = serializeTranscript({ ...props, theme: theme as any });
+            const instance = mount(Host, { target, props: { component: component as any, props } });
+            try {
+                await settle();
+                await document.fonts.ready;
+                if (theme.startsWith('DM Style')) for (const bubble of target.querySelectorAll('.chat-block')) {
+                    const background = getComputedStyle(bubble).backgroundColor;
+                    for (const text of bubble.querySelectorAll('.chat-block-toggle strong, .transcript-block-timestamp, .message-content p, .technical-message-content')) {
+                        const style = getComputedStyle(text);
+                        assert(style.opacity === '1' && contrast(style.color, background) >= 4.5, theme + ': every speaker body, label and timestamp meets AA');
+                    }
+                }
+                const inline = [...target.querySelectorAll<HTMLElement>('.message-inline-code')];
+                assert(inline.length === 2, theme + ': both speaker bubbles rendered');
+                for (const element of inline) {
+                    const style = getComputedStyle(element);
+                    if (theme.startsWith('DM Style')) {
+                        assert(contrast(style.color, style.backgroundColor) >= 4.5, theme + ': inline text meets AA in each bubble');
+                        assert(style.fontSize === '14px' && parseFloat(style.borderTopWidth) > 0, 'readable inline size and boundary');
+                        assert(!style.backgroundColor.startsWith('rgba'), 'opaque inline surface independent of bubble color');
+                    } else assert(style.fontSize === '12px' && style.borderTopWidth === '0px', theme + ': existing inline typography retained');
+                }
+                for (const element of target.querySelectorAll('.message-code-block > code')) {
+                    assert(getComputedStyle(element).fontSize === '12px', theme + ': fenced font size retained');
+                    assert(element.textContent === 'const value = 123;\n', 'fenced content retained');
+                }
+                assert(serializeTranscript({ ...props, theme: theme as any }) === capture, 'Capture unchanged by visual styling');
+            } finally { await unmount(instance); target.replaceChildren(); }
+        }
+    },
     async 'empty theme guidance preserves text and gives every role and release state readable contrast'() {
         for (const [theme, component] of themes.slice(1)) {
             target.dataset.theme = theme;

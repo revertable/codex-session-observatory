@@ -11,6 +11,16 @@ use backend::{
 };
 use serde::{Deserialize, Serialize};
 
+mod system_fonts;
+
+#[tauri::command]
+async fn list_system_fonts() -> api::ApiResult<Vec<system_fonts::SystemFont>> {
+    tauri::async_runtime::spawn_blocking(system_fonts::list)
+        .await
+        .map_err(|e| api::ErrorResponseDto::new("font_list_failed", e.to_string()))?
+        .map_err(|e| api::ErrorResponseDto::new("font_list_failed", e))
+}
+
 #[derive(Default)]
 struct NavigatorState(Arc<NavigatorService>);
 
@@ -262,6 +272,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            list_system_fonts,
             reload_session_navigator,
             list_sessions_flat,
             list_sessions_hierarchy,

@@ -16,6 +16,7 @@ const navigatorPage = () => ({ snapshot_id: 'test', sessions_root: '.', total: 2
     if (command === 'reload_session_navigator') return navigatorPage()
     if (command === 'resolve_jsonl_initial_directory') return '.'
     if (command === 'plugin:dialog|open') return selectedPath
+    if (command === 'list_system_fonts') return [{ family: 'Arial', display_name: 'Arial' }, { family: 'Consolas', display_name: 'Consolas' }, { family: 'Malgun Gothic', display_name: '맑은 고딕' }]
     if (command === 'plugin:app|version') throw new Error('No update check in test')
     if (command === 'parse_selected_jsonl') {
       requests++

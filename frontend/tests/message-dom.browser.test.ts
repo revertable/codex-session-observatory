@@ -203,6 +203,7 @@ test('Session Navigator pages, hierarchy, badges, selection and Reload preserve 
 })
 
 for (const name of [
+  'DM inline code is readable in both speaker bubbles without changing other themes or fenced code',
   'empty theme guidance preserves text and gives every role and release state readable contrast',
   'constructor keeps breaks, entities, empty leaves and inert destinations',
   'all four themes preserve original semantic and table assertions and collapse',
@@ -237,4 +238,22 @@ test('Collection toolbar, notice layout, headers and panel navigation preserve t
   })
   try { await collectionHarness.evaluate('globalThis.__collectionUiCase()') }
   finally { await collectionHarness.close() }
+})
+
+
+test('system font choices apply independently, restore defaults and persist without changing session data', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try { await app.evaluate('globalThis.__fontCase()') }
+  finally { await app.close() }
+})
+
+
+test('header halves, appearance selectors and inset arrows contain long values at default and minimum widths', { timeout:60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    for (const [width,height] of [[1360,760],[1100,720]]) {
+      await app.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false})
+      await app.evaluate('globalThis.__headerLayoutCase()')
+    }
+  } finally { await app.close() }
 })

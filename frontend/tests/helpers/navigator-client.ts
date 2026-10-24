@@ -6,7 +6,12 @@ import type { SessionSummary, SessionPage, SessionHierarchy } from '../../src/li
 import type { ParseResponseDto, TranscriptBlockDto } from '../../src/lib/parse-contract'
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message) }
-const settle = async () => { flushSync(); await tick(); await new Promise(resolve => setTimeout(resolve, 40)); flushSync() }
+const settle = async () => {
+  flushSync(); await tick()
+  void document.body.offsetHeight
+  await document.fonts.ready
+  await new Promise(resolve => setTimeout(resolve, 40)); flushSync()
+}
 const target = document.querySelector('#target') as HTMLElement
 const now = Date.now()
 const items: SessionSummary[] = Array.from({ length: 43 }, (_, index) => ({
@@ -31,6 +36,7 @@ const hierarchy = (snapshot: string): SessionHierarchy => ({ snapshot_id: snapsh
   unfiled_items: [items[42]], diagnostics })
 let longMessages = false
 let widthFixture = false
+let longHeaderFixture = false
 let specializedFixture = false
 const widthCode = 'const value = "' + 'code'.repeat(180) + '";\n  preserve indentation'
 const widthFence = String.fromCharCode(96).repeat(3)
@@ -50,6 +56,7 @@ const response = (path: string): ParseResponseDto => ({
       { entry_type: 'codex', label: 'CODEX', title: 'Assistant', timestamp: null, content: 'Reply' },
     ] },
 })
+let failFonts = false
 let reloads = 0; let flatCalls = 0; let hierarchyCalls = 0; const parses: string[] = []
 let reloadErrorMessage = 'Cannot read sessions'
 let failReload = false; let expirePage = false; let failParse = false; let empty = false
@@ -59,6 +66,10 @@ const folderTargets: string[] = []; const exportedTargets: string[] = []
 let cancelExport = false; let failAction = ''; let failExport = false; let failFolderAfterExport = false; let holdExport = false; let releaseExport: (() => void) | null = null
 ;(window as any).__TAURI_INTERNALS__ = {
   invoke: async (command: string, args?: any) => {
+    if (command === 'list_system_fonts') {
+      if (failFonts) throw new Error('Synthetic enumeration failure')
+      return [{ family: 'Arial', display_name: 'Arial' }, { family: 'Consolas', display_name: 'Consolas' }, { family: 'Malgun Gothic', display_name: '맑은 고딕' }]
+    }
     if (command === 'plugin:app|version') throw new Error('No update check')
     if (command === 'reload_session_navigator') {
       reloads++
@@ -80,6 +91,11 @@ let cancelExport = false; let failAction = ''; let failExport = false; let failF
       parses.push(args.path)
       if (failParse) throw { error: { code: 'read_failed', message: 'Session cannot be read' } }
       const result = response(args.path)
+      if (longHeaderFixture) {
+        result.source.session_id = 'session-' + 'long-한글-'.repeat(30)
+        result.source.resume_command = 'codex resume ' + result.source.session_id
+        result.session.capabilities.can_resume = true
+      }
       if (widthFixture) result.parsed_chat_log.transcript_blocks = widthBlocks
       if (specializedFixture) result.session = { classification:'guardian_review', identity: {
         thread_id:'synthetic-thread-' + 'x'.repeat(120),session_id:null,parent_thread_id:null,originator:null,thread_source:null,
@@ -141,14 +157,39 @@ function verifyNavigatorHeader() {
 }
 
 function verifyHeaderAlignment() {
-  const content = ['.selected-path-row strong', '.selection-metadata dd', '.resume-row button', '.filter-group[data-filter-layer="core"]', '.status-line-text']
+  const content = ['.selected-path-row strong', '.selection-metadata dd', '.appearance-controls', '.filter-group[data-filter-layer="core"]', '.status-line-text']
     .map(q => target.querySelector(q)!.getBoundingClientRect().left)
   assert(Math.max(...content) - Math.min(...content) < 0.02, 'metadata, Resume, Filters and Status share the content start')
-  const labels = ['.selected-path-row > span', '.selection-metadata dt', '.resume-row > span', '.filter-bar h2', '.status-line-label']
+  const labels = ['.selected-path-row > span', '.selection-metadata dt', '.style-label', '.filter-bar h2', '.status-line-label']
     .map(q => target.querySelector(q)!.getBoundingClientRect().left)
   assert(Math.max(...labels) - Math.min(...labels) < 0.02, 'upper row labels share the title start')
   const rows = ['.filter-bar', '.status-line'].map(q => target.querySelector(q)!.getBoundingClientRect())
   assert(rows.every(r => Math.abs(r.height - 44) < 0.02), 'both control rows have the same compact height')
+  const session = target.querySelector('.selection-metadata')!.getBoundingClientRect()
+  const resume = target.querySelector('.resume-row')!.getBoundingClientRect()
+  const copy = target.querySelector('.resume-row button')!.getBoundingClientRect()
+  const resumeLabel = target.querySelector<HTMLElement>('.resume-row > span')!
+  assert(getComputedStyle(resumeLabel).whiteSpace === 'nowrap' && resumeLabel.getBoundingClientRect().height <= 16, 'Resume command label fits one line')
+  assert(Math.abs(session.width - resume.width) < 0.02 && Math.abs(session.top - resume.top) < 0.02, 'Session ID and Resume use equal half columns')
+  assert(Math.abs(copy.right - resume.right) < 0.02, 'Resume copy stays at the right edge')
+  for (const label of target.querySelectorAll('.header-selector > span:first-child')) {
+    const style = getComputedStyle(label)
+    assert(style.fontSize === '9px' && style.fontWeight === '600', 'appearance sublabels are smaller and lighter than Style')
+  }
+  const selects = [...target.querySelectorAll<HTMLSelectElement>('.appearance-row select')]
+  assert(selects.length === 3 && target.querySelectorAll('.app-header select').length === 3, 'exactly three selectors in one row')
+  const selectRects = selects.map(e => e.getBoundingClientRect())
+  assert(selectRects.every(r => Math.abs(r.top - selectRects[0].top) < 0.02 && r.height === 28), 'selectors share height and alignment')
+  for (const select of selects) {
+    const style = getComputedStyle(select)
+    const field = select.parentElement!
+    const label = field.previousElementSibling!.getBoundingClientRect()
+    assert(Math.abs(select.getBoundingClientRect().left - label.right - 6) < 0.02, 'labels stay close to selects')
+    assert(select.getBoundingClientRect().width === 180, 'selects stay compact instead of filling row thirds')
+    const arrow = field.querySelector('.select-chevron')!.getBoundingClientRect()
+    assert(parseFloat(style.paddingRight) >= 36 && style.appearance === 'none', 'shared text reserve and explicit arrow')
+    assert(Math.abs(select.getBoundingClientRect().right - arrow.right - 12) < 0.02, 'arrow has consistent inset')
+  }
   const pixels = rows.map(r => Math.round(r.bottom * devicePixelRatio) - Math.round(r.top * devicePixelRatio))
   assert(pixels[0] === pixels[1], 'physical pixel row heights agree at the active DPI')
 }
@@ -197,14 +238,14 @@ let workspaceList: Element | null
   const separator = target.querySelector<HTMLElement>('[aria-label="Resize Sessions"]')!
   separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); await settle()
   for (const theme of ['DM Style', 'DM Style (Dark)']) {
-    const select = target.querySelector('select')!
+    const select = target.querySelector('.theme-selector select')!
     select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
     const header = target.querySelector('.chat-transcript-header')!
     const title = header.firstElementChild!.getBoundingClientRect()
     const notice = header.querySelector('.chat-empty-state')!.getBoundingClientRect()
     assert(title.right <= notice.left || title.bottom <= notice.top || notice.right <= title.left, 'idle DM title and notice do not overlap')
   }
-  const themeSelect = target.querySelector('select')!
+  const themeSelect = target.querySelector('.theme-selector select')!
   themeSelect.value = 'Terminal Style'; themeSelect.dispatchEvent(new Event('change', { bubbles: true })); await settle()
   separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })); await settle()
   for (let step = 0; step < 4; step++) {
@@ -224,7 +265,7 @@ let workspaceList: Element | null
     if (panel.hidden === open) await click(target.querySelector(`[aria-label="${open ? 'Show' : 'Hide'} ${name}"]`))
   }
   assert(target.querySelector('.workspace-transcript')!.firstElementChild === before && (!block || target.contains(block)), 'Transcript survives toggles')
-  const select = target.querySelector('select')!
+  const select = target.querySelector('.theme-selector select')!
   select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
   const transcript = target.querySelector('.workspace-transcript')!.getBoundingClientRect()
   const workspace = target.querySelector('.observatory-workspace')!.getBoundingClientRect()
@@ -317,13 +358,13 @@ let workspaceList: Element | null
   for (const [id, open, name] of [['sessions-panel', left, 'Sessions'], ['collection-panel', right, 'Collection']] as const) {
     if ((target.querySelector('#' + id) as HTMLElement).hidden === open) await click(target.querySelector(`[aria-label="${open ? 'Show' : 'Hide'} ${name}"]`))
   }
-  const select = target.querySelector('select')!
+  const select = target.querySelector('.theme-selector select')!
   select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle(); await settle()
   verifyOuterBackgrounds()
   assert(target.querySelector('.collection-panel [aria-label="Collection scroll actions"]'), 'Collection keeps local scroll actions inside frame')
 }
 ;(globalThis as any).__heightLong = async () => {
-  const select = target.querySelector('select')!
+  const select = target.querySelector('.theme-selector select')!
   select.value = 'Terminal Style'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
   longMessages = true; await click(button('Refresh')); await click(button('Clear Collection'))
   await click(target.querySelector('[aria-label="Add to Collection"]'))
@@ -457,7 +498,7 @@ let workspaceList: Element | null
     await openMenu(1); await choose('Open')
     assert(!(target.querySelector('#collection-panel') as HTMLElement).hidden && target.querySelector('#collection-panel')!.textContent === sameSessionCollection, 'Open same session preserves Collection like Refresh')
     for (const theme of ['Terminal Style','DM Style (Dark)','DM Style','Markdown Style']) {
-      const select = target.querySelector('select')!
+      const select = target.querySelector('.theme-selector select')!
       select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
       await openMenu(2)
       assert(menu()!.dataset.theme === theme, 'menu follows theme')
@@ -614,7 +655,7 @@ async function verifyDuplicateSelection() {
     expirePage = false; const prior = reloads; await click(button('Retry Sessions')); assert(reloads === prior + 1, 'expiry retry creates snapshot')
     await click(row(0)); assert(row(0)?.getAttribute('aria-current') === 'true', 'file picker shares active state')
     for (const theme of ['Terminal Style', 'DM Style (Dark)', 'DM Style', 'Markdown Style']) {
-      const select = target.querySelector('select')!
+      const select = target.querySelector('.theme-selector select')!
       const option = Array.from(select.options).find(option => option.value === theme)
       if (!option) continue
       select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
@@ -695,6 +736,18 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
         const dimensions = JSON.stringify(['.session-navigator', '.workspace-transcript', '.collection-panel', '.transcript-viewport'].map(selector => rect(target.querySelector(selector)!)))
         if (!baseline) baseline = dimensions
         assert(dimensions === baseline, state + ': all frame and scroll coordinates remain equal across themes')
+        for (const heading of target.querySelectorAll('.navigator-heading h2, .transcript-heading h2, .collection-panel-header h2')) {
+          const typography = getComputedStyle(heading)
+          assert(typography.fontSize === '14px' && typography.fontWeight === '650', 'panel titles share typography')
+        }
+        for (const label of target.querySelectorAll('.selected-path-row > span, .selection-metadata dt, .resume-row > span:first-child, .filter-bar > h2, .style-label, .status-line-label')) {
+          const typography = getComputedStyle(label)
+          assert(typography.fontSize === '11px' && typography.fontWeight === '650', 'header labels share typography')
+        }
+        const filters = target.querySelector('.filter-list')!.getBoundingClientRect()
+        const statusContent = target.querySelector('.status-announcement')!.getBoundingClientRect()
+        assert(Math.abs(filters.left - statusContent.left) < 1, 'Filters and Status content start aligned')
+        assert(target.querySelector('.filter-bar')!.getBoundingClientRect().height === target.querySelector('.status-line')!.getBoundingClientRect().height, 'Filters and Status row heights retained')
         assert(style.backgroundColor === getComputedStyle(renderer).backgroundColor && style.backgroundColor === getComputedStyle(viewport, '::-webkit-scrollbar-track').backgroundColor, 'renderer, gutter and scrollbar track share a surface')
         assert(style.borderWidth === '0px' && style.padding === '0px' && style.boxSizing === 'border-box', 'viewport geometry belongs to the common structure')
         assert(getComputedStyle(renderer).overflow === 'visible' && getComputedStyle(content).minHeight === '100%', 'only viewport owns vertical scrolling')
@@ -758,8 +811,8 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     assert(getComputedStyle(resetTooltip).visibility === 'hidden' && document.activeElement === resetButton, 'Escape hides tooltip without invoking Reset')
     resetButton.blur()
     const exportButton = target.querySelector('[aria-label="Export Worklog"]')!
-    assert(exportButton.previousElementSibling?.classList.contains('theme-selector'), 'Export follows Theme')
-    assert(target.querySelector('.resume-row button')?.getAttribute('aria-label') === 'Copy Resume Command', 'Resume copy remains before its command')
+    assert(exportButton.closest('.filter-bar') && !exportButton.previousElementSibling, 'Export remains first in Filters actions')
+    assert(target.querySelector('.resume-row button')?.getAttribute('aria-label') === 'Copy Resume Command', 'Resume copy remains available at the right edge')
     holdReload = true; await click(reloadButton()); assert(message() === 'Loading sessions…', 'list progress reaches common status')
     failCopy = true; await click(button('Capture Transcript'))
     assert(message() === 'Capture failed.' && severity() === 'error' && target.querySelector('.load-state')!.textContent === 'Loaded', 'execution error is separate from successful session load')
@@ -785,8 +838,8 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     assert(getComputedStyle(target.querySelector('.status-line-tooltip')!).visibility === 'visible' && target.querySelector('.status-line-tooltip')!.textContent === message(), 'keyboard focus reveals full error')
     assert(!target.querySelector('.navigator-messages,.action-status,.collection-copy-status,.transcript-action-status,.message-link-error'), 'local runtime feedback containers removed')
     for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
-      const select = target.querySelector('select')!; select.value = theme; select.dispatchEvent(new Event('change',{bubbles:true})); await settle()
-      assert(JSON.stringify(bounds()) === stable, 'four themes keep fixed status and workspace heights')
+      const select = target.querySelector('.theme-selector select')!; select.value = theme; select.dispatchEvent(new Event('change',{bubbles:true})); await settle()
+      assert(JSON.stringify(bounds()) === stable, 'four themes keep fixed status and workspace heights: ' + JSON.stringify({ theme, expected: stable, actual: bounds() }))
       assert(message() === reloadErrorMessage, 'theme change preserves errors')
       checkHeaderRows()
       assert(statusBackground() === 'rgb(253, 232, 231)', 'theme changes preserve the error background')
@@ -801,5 +854,110 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
     else delete (navigator as any).clipboard
     await unmount(instance)
+  }
+}
+
+
+;(globalThis as any).__fontCase = async () => {
+  const key = 'observatory.fonts.v1'
+  const selectFont = async (kind: string, value: string) => {
+    const e = target.querySelector<HTMLSelectElement>('[aria-label="' + kind + ' font"]')!
+    e.value = value; e.dispatchEvent(new Event('change', { bubbles:true })); await settle()
+  }
+  const family = (selector: string) => getComputedStyle(target.querySelector(selector)!).fontFamily
+  const theme = async (value: string) => {
+    const e = target.querySelector<HTMLSelectElement>('.theme-selector select')!
+    e.value = value; e.dispatchEvent(new Event('change', {bubbles:true})); await settle()
+  }
+  localStorage.removeItem(key)
+  widthFixture = true
+  let instance = mount(App, {target}); await settle()
+  try {
+    assert(target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.value === '', 'initial Default')
+    await click(row(0))
+    await click(target.querySelectorAll<HTMLElement>('[aria-label="Add to Collection"]')[1])
+    const original = target.querySelector('.collection-message pre')!.textContent
+    for (const name of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
+      await theme(name)
+      const baseline = {text:family('.message-content p'),code:family('.message-code-block'),meta:family('.selection-metadata dd')}
+      await selectFont('Text','Arial')
+      assert(family('.message-content p').includes('Arial') && family('.selection-metadata dd').includes('Arial'), 'Text includes prose and metadata in ' + name)
+      assert(family('.message-code-block') === baseline.code, 'Text does not alter Default code')
+      assert(family('.collection-message pre > span:not(.collection-code)').includes('Arial'), 'Collection prose uses Text')
+      await selectFont('Code','Consolas')
+      assert(family('.message-inline-code,.message-code-block').includes('Consolas') && family('.collection-code').includes('Consolas'), 'Code applies to code and Collection ranges')
+      assert(family('.selected-path-row strong').includes('Consolas'), 'technical path uses Code')
+      assert(family('.message-content p').includes('Arial'), 'Code does not alter Text')
+      assert(target.querySelector('.collection-message pre')!.textContent === original, 'typography preserves raw Collection')
+      await click(button('Refresh Transcript'))
+      assert(target.querySelector('.collection-message pre')!.textContent === original, 'Refresh retains collection')
+      await selectFont('Code','Arial')
+      assert(family('.message-code-block').includes('Arial'), 'proportional Code choice is respected')
+      await selectFont('Text','')
+      assert(family('.message-content p') === baseline.text && family('.selection-metadata dd') === baseline.meta, 'Text Default restores legacy rules')
+      await selectFont('Code','')
+      assert(family('.message-code-block') === baseline.code, 'both Default restore legacy code')
+    }
+    await selectFont('Text','Malgun Gothic'); await selectFont('Code','Consolas')
+    for (const label of ['Hide Sessions','Hide Collection','Show Sessions','Show Collection']) await click(button(label))
+    await click(row(1))
+    assert(target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.value === 'Malgun Gothic', 'selection survives session switch')
+    await unmount(instance)
+    instance = mount(App,{target}); await settle()
+    assert(target.querySelector<HTMLSelectElement>('[aria-label="Code font"]')!.value === 'Consolas', 'saved Code restores on mount')
+    assert(family('#app-title').includes('Malgun Gothic'), 'saved Text applies on mount')
+    await unmount(instance)
+    localStorage.setItem(key, JSON.stringify({text:'Removed font',code:'Consolas'}))
+    instance = mount(App,{target}); await settle()
+    assert(target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.value === '' && target.querySelector<HTMLSelectElement>('[aria-label="Code font"]')!.value === 'Consolas', 'missing font defaults independently')
+    assert(target.querySelector('.status-line-text')!.textContent!.includes('not installed'), 'missing font warning')
+    await unmount(instance)
+    localStorage.setItem(key, '{invalid')
+    instance = mount(App,{target}); await settle()
+    assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be read'), 'invalid saved setting warning')
+    const originalSet = Storage.prototype.setItem
+    try {
+      Storage.prototype.setItem = () => { throw new Error('Synthetic storage denial') }
+      await selectFont('Text','Arial')
+      assert(family('#app-title').includes('Arial') && target.querySelector('.status-line-text')!.textContent!.includes('could not be saved'), 'storage failure retains effective choice with warning')
+    } finally { Storage.prototype.setItem = originalSet }
+    await unmount(instance)
+    failFonts = true
+    instance = mount(App,{target}); await settle()
+    assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be listed'), 'font enumeration failure reported')
+    assert(!target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.disabled, 'Default remains available after failure')
+  } finally {
+    await unmount(instance); localStorage.removeItem(key); failFonts = false; widthFixture = false
+  }
+}
+
+;(globalThis as any).__headerLayoutCase = async () => {
+  longHeaderFixture = true
+  let copied = ''
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  Object.defineProperty(navigator, 'clipboard', { configurable:true, value:{ writeText:async (text:string)=>{copied=text} } })
+  const instance = mount(App,{target}); await settle()
+  try {
+    verifyHeaderAlignment()
+    assert(button('Copy Resume Command').disabled, 'Resume copy initially disabled')
+    await click(row(0))
+    for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
+      const select = target.querySelector<HTMLSelectElement>('.theme-selector select')!
+      select.value = theme; select.dispatchEvent(new Event('change',{bubbles:true})); await settle()
+      verifyHeaderAlignment()
+      for (const selector of ['.selection-metadata dd','.resume-row code']) {
+        const e = target.querySelector<HTMLElement>(selector)!
+        const half = e.closest('.selection-metadata,.resume-row')!.getBoundingClientRect()
+        assert(e.scrollWidth > e.clientWidth && e.title === e.textContent, 'long value is ellipsized with full tooltip')
+        assert(e.getBoundingClientRect().right <= half.right, 'long values stay in their half')
+      }
+      assert(document.documentElement.scrollWidth <= innerWidth, 'header does not create horizontal overflow')
+      await click(button('Copy Resume Command'))
+      assert(copied === 'codex resume session-' + 'long-한글-'.repeat(30), 'copy uses complete command, not truncated display')
+    }
+  } finally {
+    await unmount(instance); longHeaderFixture = false
+    if (originalClipboard) Object.defineProperty(navigator,'clipboard',originalClipboard)
+    else delete (navigator as any).clipboard
   }
 }

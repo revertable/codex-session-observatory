@@ -45,6 +45,7 @@ const response: ParseResponseDto = {
 let selectedPath = 'session.jsonl'
 const navigatorPage = () => ({ snapshot_id: 'test', sessions_root: '.', total: 2, items: [selectedPath, 'other-' + selectedPath].map((path, i) => ({entry_key: String(i), thread_id: String(i), path, title: i ? 'Other fixture' : 'Session fixture', title_source: 'database_name', created_at_ms: 1, created_at_source: 'session_meta', last_conversation_at_ms: null, last_conversation_at_source: 'unavailable', storage_date: null, classification: 'interactive', thread_source: 'user'})), next_cursor: null, has_more: false, diagnostics: { discovered_files: 2, guardian_sessions: 0, duplicate_files: 0, unreadable_files: 0, warnings: [] } })
 ;(window as any).__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+  if (command === 'list_system_fonts') return []
   if (command === 'reload_session_navigator') return navigatorPage()
   if (command === 'resolve_jsonl_initial_directory') return '.'
   if (command === 'plugin:dialog|open') return 'session.jsonl'
@@ -86,6 +87,10 @@ const click = async (label: string) => {
     const articles = Array.from(panel.querySelectorAll('article'))
     assert(articles.map(article => article.querySelector('strong')!.textContent).join(',') === '[YOU],[CODEX],[TOOL]', 'shared roles and source order')
     assert(articles.every((article, index) => article.querySelector('pre')!.textContent === response.parsed_chat_log.transcript_blocks[index].content), 'raw bodies preserved')
+    assert(articles[0].querySelector('pre > span:not(.collection-code)'), 'ordinary Collection text stays prose')
+    assert(articles[1].querySelector('.collection-code')?.textContent?.includes('```'), 'raw fenced code gets a separate typography range')
+    assert(articles[2].querySelector('.collection-code')?.textContent === response.parsed_chat_log.transcript_blocks[2].content, 'tool log retains one code range')
+
     const title = panel.querySelector('h2')!.getBoundingClientRect()
     const actions = panel.querySelector('.collection-actions')!.getBoundingClientRect()
     assert(title.right <= actions.left && Math.abs((title.top + title.bottom) - (actions.top + actions.bottom)) < 2, 'header stays on one nonoverlapping row')
