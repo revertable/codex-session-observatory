@@ -577,8 +577,8 @@
 }
 
 /* Message semantics are shared; typography belongs to the selected presentation. */
-.message-content { white-space: normal; overflow-wrap: anywhere; }
-.message-content .message-text,
+/* Literal text inherits whitespace from its semantic parent, without per-token spans. */
+.message-content { white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-content .message-inline-code { white-space: pre-wrap; }
 .message-content p { margin: 0 0 0.8em; }
 .message-content > :last-child { margin-bottom: 0; }
@@ -665,6 +665,7 @@
 }
 .message-content .message-table th,
 .message-content .message-table td {
+  white-space: pre-wrap;
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   padding: 0.55em 0.75em;
   vertical-align: top;

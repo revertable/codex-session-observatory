@@ -27,10 +27,10 @@ function appendNodes(
     let childParent: HTMLElement | undefined
     switch (node.type) {
       case 'text':
-        element = document.createElement('span')
-        element.className = 'message-text'
-        element.appendChild(document.createTextNode(node.text ?? ''))
-        break
+        // Preserve literal text without an element for each token. Whitespace
+        // belongs to the semantic parent, including table cells.
+        parent.appendChild(document.createTextNode(node.text ?? ''))
+        continue
       case 'code_inline':
         element = document.createElement('code')
         element.className = 'message-inline-code'

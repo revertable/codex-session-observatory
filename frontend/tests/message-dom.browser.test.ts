@@ -203,6 +203,7 @@ test('Session Navigator pages, hierarchy, badges, selection and Reload preserve 
 })
 
 for (const name of [
+  'literal text keeps whitespace, geometry, selection and fonts without token wrappers',
   'DM inline code is readable in both speaker bubbles without changing other themes or fenced code',
   'empty theme guidance preserves text and gives every role and release state readable contrast',
   'constructor keeps breaks, entities, empty leaves and inert destinations',

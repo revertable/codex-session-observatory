@@ -58,6 +58,60 @@ function contrast(foreground: string, background: string) {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 const cases: Record<string, () => Promise<void>> = {
+    async 'literal text keeps whitespace, geometry, selection and fonts without token wrappers'() {
+        const content = '한글 English  spaced **bold  text** *emphasis* [link  text](https://example.com/docs)\nnext line  \nhard break\n\n- first  item\n- **second** item\n\n3. third\n4. fourth\n\n' + code('code  space') + '\n\n' + fence + '\n  code & <literal>\n' + fence + '\n\n| Left | Right |\n|:---|---:|\n| 한글  English | **bold** ' + code('x  y') + ' |\n\n' + 'long한글URL/path?key=value&another=123 '.repeat(12);
+        for (const [theme, component] of themes) for (const width of [220, 720]) {
+            target.dataset.theme = theme;
+            target.style.width = width + 'px';
+            const blocks = [block(content), block(content, 'codex')];
+            const props = { theme, isLoaded: true, publicReleaseStatus: null, showIdentityNote: false, observedEventCounts: [], blocks, references: [], collapsedBlocks: {}, onToggleBlock: () => {}, messageIds: identifyMessages('fixture.jsonl', blocks) };
+            const instance = mount(Host, { target, props: { component: component as any, props } });
+            try {
+                await settle();
+                for (const host of target.querySelectorAll<HTMLElement>('.message-content')) {
+                    const textNodes = () => {
+                        const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+                        const nodes: Text[] = [];
+                        while (walker.nextNode()) if (!walker.currentNode.parentElement?.closest('code')) nodes.push(walker.currentNode as Text);
+                        return nodes;
+                    };
+                    const snapshot = () => {
+                        const origin = host.getBoundingClientRect();
+                        const range = document.createRange();
+                        range.selectNodeContents(host);
+                        getSelection()!.removeAllRanges();
+                        getSelection()!.addRange(range);
+                        return {
+                            text: host.textContent, visible: host.innerText, selected: getSelection()!.toString(), height: origin.height,
+                            leaves: textNodes().map(node => {
+                                const r = document.createRange(); r.selectNodeContents(node);
+                                const style = getComputedStyle(node.parentElement!);
+                                return { font: style.font, color: style.color, rects: [...r.getClientRects()].map(rect => [rect.x-origin.x, rect.y-origin.y, rect.width, rect.height]) };
+                            }),
+                        };
+                    };
+                    const actual = snapshot();
+                    const count = host.querySelectorAll('*').length;
+                    // Reconstruct the previous renderer in place for a differential
+                    // layout check, rather than asserting a newly chosen layout.
+                    for (const node of textNodes()) {
+                        const wrapper = document.createElement('span');
+                        wrapper.style.whiteSpace = 'pre-wrap';
+                        node.replaceWith(wrapper); wrapper.append(node);
+                    }
+                    host.style.whiteSpace = 'normal';
+                    for (const cell of host.querySelectorAll<HTMLElement>('th,td')) cell.style.whiteSpace = 'normal';
+                    const previous = snapshot();
+                    assert(JSON.stringify(actual) === JSON.stringify(previous), `${theme}/${width}: original text, selection, line boxes, fonts and height`);
+                    assert(count < host.querySelectorAll('*').length, 'fewer elements with complete text');
+                    inert(host);
+                }
+            } finally {
+                getSelection()!.removeAllRanges();
+                await unmount(instance); target.replaceChildren(); target.style.removeProperty('width');
+            }
+        }
+    },
     async 'DM inline code is readable in both speaker bubbles without changing other themes or fenced code'() {
         const content = 'English 한글 **bold** ' + code('CONFIG=9000 이런 표현') + '\n\n' + fence + '\nconst value = 123;\n' + fence;
         for (const [theme, component] of themes) {
@@ -131,7 +185,8 @@ const cases: Record<string, () => Promise<void>> = {
         }
         const host = document.createElement('div');
         host.append(buildMessageDom(document, [{ type: 'text', text: '' }]).fragment);
-        assert(host.firstChild?.firstChild?.nodeType === 3 && host.firstChild.firstChild.nodeValue === '', 'empty semantic leaf retained');
+        const emptyText = document.createTreeWalker(host, NodeFilter.SHOW_TEXT).nextNode();
+        assert(emptyText !== null && emptyText.nodeValue === '', 'empty semantic leaf retained');
         for (const href of ['javascript:evil', 'data:text/html,x', 'file:///private', 'javascript&#58;evil', 'https%3A%2F%2Fexample.com']) {
             host.replaceChildren(buildMessageDom(document, [{ type: 'link', href, children: [{ type: 'text', text: 'label' }] }]).fragment);
             assert(!host.querySelector('a') && host.textContent === 'label', 'unsafe direct AST rejected');
