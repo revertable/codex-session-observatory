@@ -184,6 +184,10 @@ and Resume Command notice space as status text appears and clears.
 
 ## Verification Reporting
 
+Historical performance measurements, adoption decisions, and their limitations
+are recorded in [performance-history.md](performance-history.md). Those
+observations do not replace the current verification requirements below.
+
 Every implementation report must state the verification status. Record each
 applicable check as one of:
 
