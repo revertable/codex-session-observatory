@@ -1,118 +1,64 @@
 # Observatory Frontend
 
-This directory contains the Svelte control room and its Tauri desktop bridge.
-The Rust backend remains responsible for JSONL inspection, parsing, session
-routing, parent-session lookup, and Worklog generation.
+This directory contains the Svelte workspace and its Tauri desktop bridge. Rust owns JSONL decoding, session inspection and classification, Navigator snapshots, parent-session lookup, and Worklog generation. The desktop bridge calls the backend in-process; it is not a network API or local server.
 
-## Transcript data flow
+## Session Navigator and loading
 
-The initial load requests all observation kinds once and retains those
-transcript blocks in frontend state. Filter changes project the retained blocks
-without reparsing the source file. Theme changes select the corresponding
-renderer without an additional keyed remount of the transcript container.
+`lib/session-navigator/` implements Flat and Hierarchical views of one backend snapshot. The backend discovers ordinary and ChatGPT Handoff sessions under `CODEX_HOME/sessions`, defaulting to the user's `.codex/sessions`. It excludes archives, Guardian reviews, and linked sources. Title metadata and actual conversation activity are collected by the backend; missing-title sources become Untitled Session without invented prompt titles.
 
-Collapse state is owned by `App.svelte` and is reset when the transcript scope
-(source session, filter, or theme) changes. **Capture Transcript** serializes the
-same filtered blocks, references, theme, and collapse state directly from data;
-it does not scrape rendered DOM text.
+Flat uses snapshot-bound cursors and pages of 20 in original creation-time order. Hierarchical follows date folders and includes unfiled items. Reload replaces the snapshot and invalidates old cursors and action targets. The frontend coordinates generations, duplicate-request protection, loading/error feedback, and retry. Activity affects title weight only.
 
-Refresh pending and failure retain the last successful observations. Equal
-message content reuses the existing DOM subtree; appended messages are added
-without replacing the retained transcript. `TranscriptViewer.svelte` selects
-the presentation, while `AppLayout.svelte` owns the Transcript/Collection
-columns. A left Session Navigator is a future extension point, not a current
-feature.
+`App.svelte` reuses one load workflow for Navigator selection and parent-session navigation. A source load requests all observation kinds once; filters project retained blocks without reparsing. Plain and zstd-compressed JSONL share the transport contract. Context-menu Open uses the same selection flow; folder/Export commands revalidate snapshot identity and paths without replacing the selected transcript.
 
-## Shared message rendering
+## Transcript rendering and state
 
-User and Codex blocks share the `message-semantics.ts` Markdown AST and the
-static DOM constructor in `message-dom.ts` across all four themes. Supported
-elements include paragraphs, emphasis, lists, links, inline and fenced code,
-and tables. Tool calls, results, and metadata remain plain text. Raw HTML and
-images are disabled; external links are restricted to absolute HTTP/HTTPS
-destinations through the existing Tauri opener boundary.
+The full block array and filtered view share block references. An identity map derived from source path, role, timestamp, content, and duplicate occurrence is reused while the original array and path are unchanged. All three renderers use these keys. Refresh receives new DTOs and recomputes identities while equal content retains its DOM attachment.
 
-## Collection state and outputs
+Refresh pending and failure retain the last successful observations. `TranscriptViewer.svelte` selects Terminal, Markdown, or Chat rendering; the two DM themes share Chat. Collapse state belongs to App and resets when source, filters, or theme changes. Capture serializes filtered blocks, references, theme, and collapse state directly from data, without scraping DOM.
 
-`lib/collection/` owns in-memory selection, read-only presentation, and clipboard
-serialization. Keys combine the loaded source path, kind, raw timestamp,
-content, and occurrence number before filtering. Collected items snapshot the
-parsed block and sort by its index in the unfiltered transcript, independently
-of selection time and timestamps.
+User/Codex bodies share the Markdown AST and safe static DOM constructor. Semantics include paragraphs, emphasis, lists, links, inline/fenced code, and tables. Tool calls/results and metadata remain plain text. Raw HTML and images are disabled; external links use validated absolute HTTP/HTTPS destinations through Tauri's opener. Text tokens use Text nodes without redundant span wrappers. Semantic parents and table cells preserve whitespace. Transcript virtualization and `content-visibility` skipping are not enabled.
 
-Refresh retains the exact collection snapshots, order, selected indicators,
-and panel state, including during pending and failure. Filter/theme changes
-do not reset the collection. Selecting another path or resetting the session
-clears it and closes the panel. Adding the first item opens the panel; later
-additions respect a closed panel. Clear resets selections while keeping the
-current panel state; Copy All retains them. Collection is not persisted across
-app restarts.
+## Workspace and common feedback
 
-The panel uses `pre` for raw parsed content, preserving Markdown fences and
-whitespace without visual Markdown rendering. It does not reconstruct the
-original JSONL record or reverse any parser normalization. Display and Copy All
-share role labels and the Transcript's local timestamp formatter. Original
-timestamps remain part of message identity.
+`AppLayout.svelte` and common CSS own the Sessions / Transcript / Collection Grid, shared available height, independent panel scrolling, side-panel toggles, and constrained resize tracks. Each panel's Top/Bottom controls target its own viewport. `panel-scroll.ts` handles animation, reduced motion, and cancellation; it does not scroll the page window. Theme styles own presentation rather than alternate workspace geometry.
 
-Collection, Capture Transcript, and Export Worklog have separate inputs:
-Collection serializes selected snapshots; Capture serializes the filtered
-theme/collapse presentation; the backend Worklog exporter reads the complete
-source session. Collection state is never passed to Capture or Worklog.
+`SessionHeader.svelte` presents load state, source information, resume copying, appearance, filters, and panel actions. Loaded/Idle is a badge; Reset is separate. The common status controller coordinates user-facing action results and errors without duplicating feedback in each panel.
 
-The toolbar Bottom action and existing Top action share the window scroll
-target, 200ms animation, and reduced-motion behavior. Browser tests wait for
-the destination across consecutive frames with a bounded timeout and include
-a deliberately delayed frame; they do not assert completion after a fixed
-300ms delay.
+`system_fonts.rs` uses Windows DirectWrite to enumerate installed families. Text and Code choices map independently to CSS variables; empty values mean Default. Settings use WebView local storage key `observatory.fonts.v1`; unavailable saved families revert to Default. Character fallback is system-dependent, and a proportional Code choice is not silently replaced. No comparison font assets are bundled.
+
+## Collection and output boundaries
+
+`lib/collection/` owns selection, read-only presentation, and clipboard serialization. Items retain snapshots and original unfiltered indexes. Source order is independent of click order and timestamps; duplicate occurrences have independent identities. Refresh, filters, and themes preserve snapshots and panel state. A different source or Reset clears Collection and closes it. Copy All keeps selections; Clear leaves the panel open. Collection is not persisted across restarts.
+
+Collection shows parsed text, not reconstructed JSONL records. General prose follows Text and actual code/log segments follow Code; the whole Collection is not code-only. Markdown fences, line breaks, and indentation remain without visual Markdown rendering.
+
+Collection serializes selected snapshots, Capture serializes the transcript presentation, and Worklog reads the complete source in Rust. Filters and Collection are not passed to the exporter. Existing manifest compatibility, staging, and overwrite safeguards remain in the backend.
+
+Desktop parse/Export commands schedule blocking work away from the native message thread. Shared file-operation serialization is acquired before worker scheduling and held until completion. This protects native responsiveness and limits concurrent file work; it does not remove IPC or renderer costs. See [Performance History](../docs/performance-history.md) for measurements and rejected approaches.
 
 ## Update availability
 
-At launch, `App.svelte` reads the packaged application version and performs one
-unauthenticated request to GitHub's latest public release endpoint. A notice is
-passed to the initial transcript presentations for `update-available`,
-`current`, or `development` results. The last indicates a valid running version
-newer than the latest public release. Network failures and unrecognized
-responses remain silent, and the fixed official Releases URL is the only update
-link opened. The request sends no session content, selected paths, or session
-identifiers.
+On startup App reads the packaged version and makes one unauthenticated GitHub latest-release request. Initial guidance can show current, update-available, or development status. Network failures and unknown responses stay silent. Only the official Releases URL is opened; session content, paths, and IDs are not sent. Updates are not downloaded or installed.
 
-## Development
+## Development and verification
 
-Install the locked dependencies and start an interactive desktop development
-run from `frontend/`:
+Install Node.js/npm, Rust stable, and Windows Tauri prerequisites (MSVC build tools, Windows SDK, and WebView2). From `frontend/`:
 
 ```text
 npm ci
 npm run tauri:dev
 ```
 
-For automated tests, static checks, production builds, Rust package tests,
-desktop build verification, and change-specific requirements, follow the
-[test matrix](../docs/test-matrix.md).
+The command adapter is in `src-tauri/`; parsing and session business rules remain in the backend crate. Follow the [test matrix](../docs/test-matrix.md) for Node-only tests, client DOM tests, static checks, Rust tests, and the full repository `verify.ps1` sequence. Browser integration uses an installed browser and isolated profiles; it does not replace native clipboard/dialog or packaged-EXE checks.
 
-The desktop command layer is under `src-tauri/`. It adapts typed backend DTOs to
-Tauri commands and must not duplicate parser or session-routing behavior.
+## Windows builds and version metadata
 
-## Windows source builds and version metadata
+`build-and-run.bat` builds the release EXE, packages the portable ZIP, and launches it. This is separate from verification. The EXE is `frontend/src-tauri/target/release/codex-session-observatory.exe`. Packaging reads the Tauri version for `release/Codex-Session-Observatory_<version>_windows-x64-portable.zip` and includes that EXE, root LICENSE, and `src-tauri/portable/README.txt`.
 
-Install Node.js with npm, the Rust stable toolchain, and the Windows Tauri build
-prerequisites (MSVC build tools, Windows SDK, and WebView2). Run `npm ci` from
-`frontend/` in a fresh checkout. From the repository root, `build-and-run.bat`
-builds the release executable without an installer, packages a portable ZIP,
-and launches the executable. This packaging path is separate from verification.
+If a verified release EXE already exists, package it without recompiling from the repository root:
 
-The executable is `frontend/src-tauri/target/release/codex-session-observatory.exe`.
-The packaging script reads `tauri.conf.json` to name
-`release/Codex-Session-Observatory_<version>_windows-x64-portable.zip`, containing
-the executable, root `LICENSE`, and `src-tauri/portable/README.txt`.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File frontend/src-tauri/scripts/package-portable.ps1 -ExecutablePath frontend/src-tauri/target/release/codex-session-observatory.exe
+```
 
-Synchronize the application version in `frontend/package.json`, the npm
-lockfile's root and empty-path package, `backend/Cargo.toml`,
-`frontend/src-tauri/Cargo.toml`, and `frontend/src-tauri/tauri.conf.json`.
-Both Cargo lockfiles must also reflect the local package versions (`backend`
-in both, and `codex-session-observatory-tauri` in the desktop lockfile).
-Dependency package versions are independent. Tauri build metadata supplies the
-Windows executable version and the runtime version used by the update check.
-After a version change, check the compiled executable's FileVersion and
-ProductVersion as well as the source metadata. A four-part Windows version
-such as `1.3.0.0` corresponds to app version `1.3.0`.
+Synchronize application versions in `frontend/package.json`, the npm lockfile's root and empty-path package, `backend/Cargo.toml`, `frontend/src-tauri/Cargo.toml`, and `frontend/src-tauri/tauri.conf.json`. Both Cargo locks reflect the local backend package, and the desktop lock also reflects `codex-session-observatory-tauri`. Third-party versions are independent. Tauri supplies runtime and Windows EXE metadata; inspect FileVersion and ProductVersion after building. Windows `2.0.0.0` corresponds to application `2.0.0`.

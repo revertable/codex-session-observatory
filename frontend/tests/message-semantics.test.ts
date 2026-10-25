@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { spawnSync } from 'node:child_process'
 import { parseMessageMarkdown, messageSemantics } from '../src/lib/rendering/message-semantics.ts'
 import type { MessageNode } from '../src/lib/rendering/message-semantics.ts'
 import { messagePlainText } from '../src/lib/rendering/message-plain-text.ts'
@@ -9,6 +10,50 @@ import { collectionTextParts } from '../src/lib/collection/content-typography.ts
 const block = (content: string, entry_type: TranscriptBlockDto['entry_type'] = 'you'): TranscriptBlockDto =>
   ({ entry_type, label: '[YOU]', title: '[YOU]', timestamp: null, content })
 const walk = (nodes: MessageNode[]): MessageNode[] => nodes.flatMap(node => [node, ...walk(node.children ?? [])])
+
+test('reference links retain Markdown semantics and reject unsafe destinations', () => {
+  const valid = '[**한글 docs**][guide]\n\n[guide]: https://example.com/docs "Guide"'
+  const semantic = parseMessageMarkdown(valid)
+  assert.equal(messagePlainText(semantic), '한글 docs (https://example.com/docs)')
+  assert.ok(walk(semantic.nodes).some(node => node.type === 'strong'))
+  assert.ok(walk(semantic.nodes).some(node => node.type === 'link' && node.href === 'https://example.com/docs'))
+  const unsafe = parseMessageMarkdown('[bad][target]\n\n[target]: javascript:alert(1)')
+  assert.ok(walk(unsafe.nodes).every(node => node.type !== 'link' || node.href == null))
+})
+
+test('unclosed multiline reference definitions terminate within an isolated safety deadline', () => {
+  // GHSA-gfr2-rv44-r23c: keep the pathological parser input out of the test runner
+  // process so a future quadratic regression can be terminated, not hang the suite.
+  const parserUrl = new URL('../src/lib/rendering/message-semantics.ts', import.meta.url).href
+  for (const prefix of ['[', '[x]: /url "']) {
+    const script = `
+      import assert from 'node:assert/strict';
+      import MarkdownIt from 'markdown-it';
+      import { parseMessageMarkdown } from ${JSON.stringify(parserUrl)};
+      const input = ${JSON.stringify(prefix)} + 'a\\n'.repeat(400000) + 'END';
+      const parser = new MarkdownIt({ html: false, linkify: false, typographer: false });
+      parser.disable(['image', 'heading', 'lheading', 'blockquote', 'hr', 'strikethrough']);
+      assert.ok(parser.parse(input, {}).length > 0);
+      // The app's pre-existing AST spread limit is separate from the reference
+      // parser DoS. Exercise that adapter with a bounded token count as well.
+      const result = parseMessageMarkdown(${JSON.stringify(prefix)} + 'a\\n'.repeat(20000) + 'END');
+      const pending = [...result.nodes];
+      let sawEnd = false;
+      while (pending.length) {
+        const node = pending.pop();
+        assert.notEqual(node.type, 'link');
+        if (node.text?.endsWith('END')) sawEnd = true;
+        for (const child of node.children ?? []) pending.push(child);
+      }
+      assert.ok(sawEnd, 'trailing text remains available');
+    `
+    const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', script], {
+      timeout: 15000, encoding: 'utf8', maxBuffer: 1024 * 1024,
+    })
+    assert.ifError(result.error)
+    assert.equal(result.status, 0, result.stderr)
+  }
+})
 
 test('Collection typography separates prose, raw code and logs without rewriting source text', () => {
   for (const newline of ['\n', '\r\n', '\r']) {

@@ -4,86 +4,69 @@
 
 **언어:** [English](README.md) | 한국어
 
-Codex Session Observatory는 Codex CLI와 Codex Windows 앱의 세션 JSONL 파일을 읽는 Windows 데스크톱 앱입니다. 대화 기록을 열람하고, 현재 화면의 텍스트를 캡처하고, 선택한 메시지를 모으거나 전체 세션을 구조화된 작업 로그로 내보낼 수 있습니다. 세션 파일은 로컬에서 처리하며 원본을 변경하지 않습니다.
+Codex Session Observatory는 로컬 Codex 세션 기록을 탐색하고 읽는 Windows 데스크톱 도구입니다. 대화를 살펴보고, 필요한 메시지를 모으고, 현재 표현을 복사하거나 전체 세션을 구조화된 Worklog로 내보냅니다. 일반 `.jsonl`과 압축 `.jsonl.zst`를 로컬에서 처리하며 원본을 다시 쓰지 않습니다.
+
+## 개발 철학
+
+저는 이 도구를 독립적으로 개발하고 유지보수하는 1인 개발자입니다. 개인 프로젝트이자 제가 실제 Codex 작업에서 지속적으로 사용하는 도구이기도 합니다. 개발은 **Validation-first** 원칙을 따릅니다. 실사용에서 필요성이 확인된 기능을 반영하고, 발견한 문제는 조사와 검증을 거쳐 개선합니다.
+
+기능의 수보다 실제 사용 가치, 정확성, 원본 기록의 보존을 중요하게 생각합니다. 메시지의 순서와 맥락을 유지하면서 사용자가 읽고 수집하고 활용할 기록을 직접 선택하도록 돕고자 합니다. 로컬 기록으로 신뢰할 수 있는 수치를 보장하지 못하는 사용량 시각화를 반려한 것도 같은 판단의 연장선입니다.
 
 ## 시작하기
 
-1. [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases/latest)에서 Windows 포터블 ZIP을 내려받습니다.
+1. [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases/latest)에서 Windows x64 포터블 ZIP을 내려받습니다.
 2. 압축을 풀고 `codex-session-observatory.exe`를 실행합니다.
-3. **Select JSONL**을 클릭해 세션 파일을 선택합니다.
+3. **Sessions**에서 세션을 선택해 **Transcript**에 불러옵니다. 다시 활용할 메시지는 **Collection**에 담습니다.
 
-압축 파일에는 앱, `LICENSE`, 영문·한글 안내를 담은 `README.txt`가 포함됩니다.
+`CODEX_HOME/sessions`에서 세션을 조회하며, `CODEX_HOME`이 없으면 `%USERPROFILE%\.codex\sessions`를 사용합니다. ZIP에는 EXE, `LICENSE`, 영문·한국어 `README.txt`가 포함됩니다. Windows에 설치된 Microsoft Edge WebView2 런타임을 사용하며, 설치 프로그램이나 자동 업데이트 기능은 포함하지 않습니다.
 
-## 주요 기능
+## 세션 탐색과 대화 읽기
 
-| 기능 | 동작 | 결과 |
-| --- | --- | --- |
-| Transcript | 테마, 역할 필터, 메시지 접기·펼치기로 세션을 읽습니다 | 화면의 대화 기록 |
-| Capture Transcript | 현재 필터·테마·접기 상태를 반영한 대화 내용을 복사합니다 | 클립보드 텍스트 |
-| Collection | 선택한 메시지를 원본 대화의 출현 순서대로 모읍니다 | **Copy All**로 클립보드 복사 |
-| Export Worklog | 필터나 Collection 선택과 관계없이 전체 세션을 내보냅니다 | 구조화된 로컬 파일 |
+작업 공간은 **Sessions / Transcript / Collection**으로 구성됩니다. Sessions와 Collection은 각각 숨기거나 열 수 있고, 경계를 조절해 너비를 바꿀 수 있습니다. 세 패널은 독립적으로 스크롤하며 각자의 Top/Bottom 컨트롤을 제공합니다.
 
-네 기능은 서로 독립적으로 동작합니다. 메시지를 수집해도 대화 기록이나 Capture Transcript·Export Worklog에 사용되는 내용은 바뀌지 않습니다.
+- **Flat**: 세션의 최초 생성 시각이 최신인 순서로 표시하며, 스크롤하면 다음 항목을 불러옵니다.
+- **Hierarchical**: 실제 연도·월·날짜 폴더 구조를 따릅니다. 해당 폴더 밖의 세션도 별도 그룹에서 찾을 수 있습니다.
 
-## 대화 기록 읽기
+두 모드는 같은 일반·ChatGPT Handoff 세션 목록을 사용합니다. Archived 세션과 Guardian review 세션은 이 목록에서 제외합니다. 제목은 현재 기기에서 확인할 수 있는 메타데이터를 사용합니다. 제목 정보가 없으면 **Untitled Session**과 정보 툴팁으로 표시합니다. 최근 대화 활동은 제목 강조에만 사용하며 목록 순서를 바꾸지 않습니다.
 
-**Theme**에서 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)** 중 원하는 테마를 선택합니다. 네 테마는 모두 사용자와 Codex 메시지에 강조, 목록, 링크, 코드 블록, 표 등의 공통 Markdown 표현을 적용합니다. 도구 호출·도구 결과·메타데이터는 일반 텍스트로 표시합니다.
+세션을 선택하면 Transcript에 불러옵니다. 항목을 우클릭하면 **Open**, **Open Containing Folder**, **Export Worklog**를 사용할 수 있습니다. 폴더 열기와 선택하지 않은 세션의 내보내기는 현재 Transcript와 Collection을 유지합니다.
 
-**You**, **Codex**, **Tool calls**, **Tool results**, **Meta**로 표시할 역할을 선택합니다. 메시지 헤더를 클릭하면 본문을 접거나 펼칩니다. 메시지의 시간이 있으면 `YYYY-MM-DD HH:mm:ss` 형식의 로컬 시간으로 표시합니다.
+**Style**에서 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)**를 선택하고, **Filters**로 표시할 역할을 정합니다. 사용자·Codex 메시지는 Markdown 강조, 목록, 링크, 코드와 표를 공통으로 표현하고 도구 활동·메타데이터는 일반 텍스트로 표시합니다. 메시지 헤더를 클릭하면 본문을 접거나 펼칩니다. 시간이 있으면 로컬 시간으로 표시합니다.
 
-- **Refresh**는 선택한 파일을 다시 읽습니다. 불러오는 동안 현재 대화가 유지되며, 새로고침에 실패해도 기존 대화를 볼 수 있습니다.
-- Collection 토글 오른쪽의 아래쪽 화살표는 **Scroll to Bottom**입니다. 대화 아래의 **Top**은 화면 상단으로 이동합니다.
-- 세션 ID가 있으면 **Copy Resume Command**로 `codex resume <session-id>`를 복사합니다.
-- **loaded** 상태를 클릭하면 불러온 세션을 비우고 초기 화면으로 돌아갑니다.
+**Text**와 **Code**는 Windows에 설치된 글꼴을 각각 독립적으로 선택합니다. Default는 기존 앱의 글꼴 규칙을 유지합니다. 선택은 현재 기기에 저장되며, 지원하지 않는 문자의 대체 표시는 글꼴과 시스템에 따라 달라집니다. Code에 가변폭 글꼴을 선택하면 공백 기반 정렬이 달라질 수 있습니다.
 
-참조한 ChatGPT 대화는 제목과 conversation ID로 표시합니다. 식별된 자동 제공 문맥은 사람이 작성한 요청과 구분합니다. Guardian review 세션은 전용 화면으로 표시하며, 부모 세션을 로컬에서 찾으면 **Open Parent Session**을 제공합니다. 이 검토 세션에서는 재개 명령과 Worklog 내보내기를 제공하지 않습니다.
+## 수집·복사·내보내기
 
-## Capture Transcript
+| 작업 | 결과 |
+| --- | --- |
+| Transcript 헤더의 **Capture Transcript** | 현재 필터·테마·접기 상태에 따른 대화의 텍스트 표현을 복사합니다 |
+| 메시지 **+ / ✓**와 Collection **Copy All** | 선택 당시 메시지를 모아 원본 출현 순서로 복사합니다 |
+| **Resume command** 복사 컨트롤 | 제공되는 경우 `codex resume <session-id>`를 복사합니다. 앱이 명령을 실행하지는 않습니다 |
+| 툴바 또는 세션 우클릭 메뉴의 **Export Worklog** | 필터·접기 상태·Collection과 관계없이 원본 세션 전체를 내보냅니다 |
 
-대화 아래의 **Capture Transcript**를 클릭하면 대화의 텍스트 표현을 클립보드에 복사합니다. 현재 역할 필터, 테마, 메시지 접기 상태를 반영하며, 접힌 메시지는 헤더만 포함합니다. Markdown 내용은 읽을 수 있는 텍스트로 복사합니다.
+Collection은 읽기 전용입니다. 파싱된 메시지의 Markdown 기호·코드 fence·줄바꿈·들여쓰기를 역할 헤더 및 제공되는 로컬 시간과 함께 보존합니다. C, A, B 순서로 담아도 원본 순서인 A, B, C로 표시·복사하며, 제외했다가 다시 담아도 원래 위치로 돌아옵니다. Copy All은 선택을 유지하고 Clear는 비웁니다. Collection, Capture, Worklog는 각각 독립적인 입력을 사용합니다.
 
-Collection에서 선택한 메시지는 캡처에 영향을 주지 않습니다.
+Worklog는 각 사용자 요청부터 다음 요청 전까지의 Codex 응답·도구 활동을 하나의 작업 단위로 묶습니다. `codex-worklog/YYYY-MM-DD/HHMMSS_<source-id>/`에 `000_index.md`, 번호가 붙은 Markdown 작업 단위, `manifest.json`을 생성한 뒤 파일 탐색기에서 폴더를 엽니다. 기존 번들의 갱신은 호환성 및 덮어쓰기 보호 규칙을 따릅니다.
 
-## 메시지 수집하기
+## Refresh와 세션 상태
 
-1. 메시지 시간 옆의 **+**를 클릭해 Collection에 담습니다. 아이콘이 **✓**로 바뀌며, 다시 클릭하면 해당 메시지를 제외합니다.
-2. Collection Panel에서 선택한 메시지를 확인합니다. 첫 메시지를 담으면 패널이 자동으로 펼쳐집니다.
-3. **Copy All**로 수집한 메시지를 복사합니다. **Clear**는 모든 선택을 비웁니다.
+**Reload Sessions**는 Navigator 목록 스냅샷을 갱신하며 현재 Transcript와 Collection은 유지합니다. Flat/Hierarchical 모드를 바꿔도 현재 세션은 바뀌지 않습니다.
 
-패널은 처음에 접혀 있습니다. **Theme** 바로 오른쪽의 Collection 아이콘으로 패널을 펼치거나 접습니다. 툴팁은 **Show Collection** 또는 **Hide Collection**입니다.
+앱 상단과 Transcript 헤더의 **Refresh**는 현재 세션을 다시 읽습니다. 로딩 중이나 새로고침 실패 후에도 마지막으로 성공한 대화를 유지합니다. Collection의 수집 당시 원문·출현 순서·패널 상태는 Refresh, 필터, 테마 변경 후에도 남습니다. 패널을 숨겨도 상태를 유지합니다.
 
-Collection은 필터 적용 전 원본 대화에서 메시지가 출현한 순서를 유지합니다. 선택한 시점이나 타임스탬프로 정렬하지 않습니다. 같은 메시지는 한 번만 담기며, 제외했다가 다시 담아도 원래 위치로 돌아옵니다. 패널과 **Copy All**의 순서는 같습니다.
+**Loaded** 배지는 상태를 표시하며, 옆의 **X**가 불러온 세션을 초기화합니다. 다른 세션 선택 또는 초기화 시 Collection이 비워지고 패널이 닫힙니다. 앱 종료 시에도 Collection은 초기화됩니다. 공통 **Status** 행은 작업 결과·진행·경고·오류를 표시합니다.
 
-패널은 읽기 전용입니다. Markdown을 시각적으로 렌더링하는 대신, 파싱된 메시지의 Markdown 기호·코드 fence·줄바꿈·들여쓰기를 보존한 원문 텍스트를 표시합니다. `[YOU]`, `[CODEX]`, `[TOOL]` 같은 역할 헤더와 로컬 시간은 패널과 복사 결과에 함께 포함됩니다.
+## 현재 제품의 비목표
 
-필터나 테마를 바꿔도 수집 상태를 유지합니다. **Refresh**는 수집 내용·순서·선택 표시·패널 접기 상태를 유지합니다. 패널을 접거나 **Copy All**을 사용해도 선택은 남습니다. 다른 JSONL을 불러오거나 불러온 세션을 초기화하면 수집 내용이 초기화되고 패널이 접힙니다. 앱을 닫아도 수집 내용이 초기화됩니다. 수집 내용은 앱의 현재 세션 동안 유지됩니다.
+- Codex 자체를 실행하거나 대체하는 기능.
+- 원본 JSONL을 편집하거나 재작성하는 기능.
+- Codex 사용량·토큰 소비·잔여 한도·rate limit을 추적하는 계정 대시보드. 로컬 기록과 관련 메타데이터만으로는 정보가 누락되거나 늦게 갱신되고 계정 전체 상태를 확인하지 못할 수 있습니다. 현재 제품은 불확실한 수치를 신뢰할 수 있는 잔여량처럼 제공하지 않습니다. 이는 현재의 제품 판단이며 영구적인 기술적 불가능이나 모든 향후 버전의 개발 금지를 뜻하지 않습니다.
+- Collection 영구 저장 또는 세션 백업. 계속 보관할 내용은 복사하거나 내보내야 합니다.
 
-## Export Worklog
+## 로컬 처리와 프로젝트 정보
 
-**Export Worklog**를 클릭하고 상위 폴더를 선택합니다. 현재 역할 필터, 메시지 접기 상태, Collection 선택과 관계없이 전체 세션을 내보냅니다.
+세션 내용은 로컬에서 처리합니다. 시작 시 선택적인 GitHub Releases 확인으로 최신 공개 버전이나 미공개 개발 버전을 안내할 수 있으며, 세션 내용·선택 경로·세션 ID를 전송하지 않습니다. 업데이트를 내려받거나 설치하지 않습니다. 외부 링크는 사용자가 직접 선택할 때 엽니다.
 
-각 사용자 요청이 하나의 작업 단위를 시작하며, 다음 요청 전까지의 Codex 응답과 도구 활동을 함께 묶습니다. 생성되는 번들의 구조는 다음과 같습니다.
+관련 관측 접근 방식은 [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon)에서 볼 수 있습니다. 이 프로젝트는 [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer)를 이어 Rust, Svelte, Tauri로 다시 구축했습니다.
 
-```text
-<selected-parent>/
-└─ codex-worklog/
-   └─ YYYY-MM-DD/
-      └─ HHMMSS_<source-id>/
-         ├─ 000_index.md
-         ├─ 001_HHMMSS.md
-         ├─ 002_HHMMSS.md
-         ├─ ...
-         └─ manifest.json
-```
-
-`000_index.md`에는 세션 색인과 참조 대화 정보를, 번호가 붙은 Markdown 파일에는 작업 단위를 담습니다. `manifest.json`은 생성 파일을 기록하며, 같은 호환 번들을 다시 내보내면 해당 파일을 갱신합니다. 디렉터리와 파일 이름에는 로컬 시간을 사용하고, 원본 타임스탬프가 있으면 생성된 내용과 메타데이터에 유지합니다.
-
-내보내기가 끝나면 파일 탐색기에서 번들 폴더를 엽니다.
-
-## 앱 정보
-
-앱은 시작할 때 GitHub Releases를 확인하고 실행 버전이 최신인지, 새 공개 릴리스가 있는지, 미공개 개발 버전인지 안내합니다.
-
-**Visit Cosmic Horizon**은 관련 [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon)를 엽니다.
-
-Codex Session Observatory는 [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer)를 이어 Rust, Svelte, Tauri로 다시 구축한 데스크톱 앱입니다. 소스 빌드 방법은 [개발 안내](frontend/README.md), 자동 검증 절차는 [검증 매트릭스](docs/test-matrix.md)에 정리되어 있습니다.
+소스 빌드와 구조는 [개발 안내](frontend/README.md), 검증은 [테스트 매트릭스](docs/test-matrix.md)를 참조하세요. 버전별 변경 사항은 [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases)에 정리합니다.
