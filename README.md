@@ -37,6 +37,10 @@ Choose **Terminal Style**, **Markdown Style**, **DM Style**, or **DM Style (Dark
 
 ## Collect, copy, and export
 
+During a task, I sometimes bring the context of an existing conversation to another AI as part of deciding what to do next. Passing along my goals, reference material, instructions, the AI's responses, and progress so far meant finding and copying the relevant messages one by one.
+
+I built Collection to make that part of my own workflow easier. Select the messages you need and click **Copy All** to copy them together, ready to use as reference material in a new prompt.
+
 | Task | Result |
 | --- | --- |
 | **Capture Transcript**, in the Transcript header | Copies a text presentation using the current filters, theme, and collapsed/expanded state |
@@ -44,7 +48,7 @@ Choose **Terminal Style**, **Markdown Style**, **DM Style**, or **DM Style (Dark
 | **Resume command** copy control | Copies `codex resume <session-id>` when available; the app does not execute it |
 | **Export Worklog**, in the toolbar or a session's context menu | Exports the complete source session independently of filters, collapse state, and Collection |
 
-Collection is read-only. It preserves parsed message text, Markdown fences, line breaks, and indentation, with role headers and available local timestamps. Selecting C, A, B still produces A, B, C in source order; removing and re-adding a message returns it to its original position. Copy All keeps the selection; Clear empties it. Collection, Capture, and Worklog use separate inputs.
+Collected messages stay in their original transcript order, with role headers, available local timestamps, Markdown fences, line breaks, and indentation preserved. **Copy All** keeps the selection; **Clear** empties it.
 
 Each human request begins a Worklog unit containing the following Codex responses and tool activity until the next request. Export creates `codex-worklog/YYYY-MM-DD/HHMMSS_<source-id>/` with `000_index.md`, numbered Markdown units, and `manifest.json`, then opens the folder in File Explorer. Compatible existing bundles can be refreshed under the exporter's overwrite safeguards.
 
@@ -60,7 +64,7 @@ The **Loaded** badge reports state; the adjacent **X** resets the loaded session
 
 - Running or replacing Codex itself.
 - Editing or rewriting source JSONL records.
-- Tracking Codex usage, token consumption, remaining allowance, or rate limits as an account dashboard. Local logs and related metadata may be incomplete, delayed, or unable to establish account-wide state. The current product avoids presenting uncertain figures as reliable balances. This is a current product decision, not a claim of permanent technical impossibility or a restriction on all future versions.
+- Tracking Codex usage, token consumption, remaining allowance, or rate limits as an account dashboard. Local logs and related metadata can be incomplete or delayed, leaving account-wide usage unverified.
 - Permanent Collection storage or session backups. Copy or export material you need to retain.
 
 ## Local processing and project information

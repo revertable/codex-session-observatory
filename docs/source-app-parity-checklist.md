@@ -1,12 +1,12 @@
 # Source App Parity Checklist
 
-> **Status: historical reference.** This checklist preserves observations made while evaluating the original Kotlin/Swing application for the Rust/Svelte port. Its `required parity`, `planned ...`, and `possible new enhancement` labels are historical classifications, not current product requirements, open tasks, or an active roadmap. Current behavior is defined by the present repository implementation and current boundary/architecture documents.
+> **Status: historical reference.** This checklist preserves observations made while evaluating the original Kotlin/Swing application for the Rust/Svelte port. Its `required parity`, `planned ...`, and `possible new enhancement` labels describe that migration stage. Current behavior is defined by the present repository implementation and current boundary/architecture documents.
 
-The product has intentionally diverged from the original app in several areas, including the Tauri in-process command boundary, `DM Style (Dark)`, filtered transcript capture, full-session versionable Worklog bundles, specialized Guardian session routing and parent navigation, and the distinction between human-authored requests and injected transport/context. The detailed checklist below remains useful for provenance and comparison, but must not override those accepted product decisions.
+The product has intentionally diverged from the original app in several areas, including the Tauri in-process command boundary, `DM Style (Dark)`, filtered transcript capture, full-session versionable Worklog bundles, specialized Guardian session routing and parent navigation, and the distinction between human-authored requests and injected transport/context. Use the detailed checklist below for provenance and comparison, and the current implementation for accepted product behavior.
 
 This checklist recorded source-app behavior from the original Kotlin/Swing `codex-chat-viewer` app so the Rust/Svelte port could evaluate intentional parity while separating backend/API, frontend, rendering/export, and parser/domain work.
 
-The original app is read-only reference material. This document is documentation only and does not authorize API endpoints, backend source changes, frontend source changes, export implementation, rendering/theme implementation, sample data, dependencies, or changes to `../codex-chat-viewer`.
+The original app is read-only reference material.
 
 Reference source files observed:
 

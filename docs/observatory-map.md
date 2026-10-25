@@ -14,8 +14,7 @@ Purpose:
 A local-first Rust + Svelte + Tauri desktop observatory for Codex session JSONL logs.
 ```
 
-This project is not only a viewer.
-It is an observatory for AI-assisted work records.
+This project is an observatory for AI-assisted work records.
 
 ---
 
@@ -29,7 +28,7 @@ Original Kotlin/Swing version:
 https://github.com/revertable/codex-chat-viewer
 ```
 
-Codex Session Observatory began as a Rust/Svelte port of that idea and now operates as its own Tauri desktop product. The Kotlin/Swing repository remains read-only historical and behavioral reference material, not the current product contract.
+Codex Session Observatory began as a Rust/Svelte port of that idea and now operates as its own Tauri desktop product. The Kotlin/Swing repository remains read-only historical and behavioral reference material. The current repository and its tests define the product contract.
 
 ---
 
@@ -98,7 +97,7 @@ backend/src/api/
 backend/src/export/
 ```
 
-The backend is a Rust library used by the Tauri application. It is not currently an HTTP server and does not expose a standalone local web API.
+The backend is a Rust library called in-process by the Tauri application.
 
 For an ordinary session, the backend first inspects the stream for session identity, rewinds the file, and then parses it line by line with a reusable buffer. Known Codex envelopes use a typed, borrowing-oriented path. Unknown or legacy shapes retain the compatibility path through `serde_json::Value`. Candidate ordering, counters, replacement, and adjacent-deduplication semantics are shared after extraction.
 
@@ -193,7 +192,7 @@ It should handle:
 
 Business parsing, session classification, parent lookup, and Worklog generation remain in the backend crate rather than Tauri command handlers.
 
-The current command bridge calls the backend directly in-process. Do not describe this as a network API or local server.
+The current command bridge calls the backend directly in-process. Describe it as a desktop command bridge.
 
 ---
 

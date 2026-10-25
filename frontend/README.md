@@ -1,6 +1,6 @@
 # Observatory Frontend
 
-This directory contains the Svelte workspace and its Tauri desktop bridge. Rust owns JSONL decoding, session inspection and classification, Navigator snapshots, parent-session lookup, and Worklog generation. The desktop bridge calls the backend in-process; it is not a network API or local server.
+This directory contains the Svelte workspace and its Tauri desktop bridge. Rust owns JSONL decoding, session inspection and classification, Navigator snapshots, parent-session lookup, and Worklog generation. The desktop bridge calls the backend in-process.
 
 ## Session Navigator and loading
 
@@ -20,21 +20,21 @@ User/Codex bodies share the Markdown AST and safe static DOM constructor. Semant
 
 ## Workspace and common feedback
 
-`AppLayout.svelte` and common CSS own the Sessions / Transcript / Collection Grid, shared available height, independent panel scrolling, side-panel toggles, and constrained resize tracks. Each panel's Top/Bottom controls target its own viewport. `panel-scroll.ts` handles animation, reduced motion, and cancellation; it does not scroll the page window. Theme styles own presentation rather than alternate workspace geometry.
+`AppLayout.svelte` and common CSS own the Sessions / Transcript / Collection Grid, shared available height, independent panel scrolling, side-panel toggles, and constrained resize tracks. Each panel's Top/Bottom controls target its own viewport. `panel-scroll.ts` handles panel scroll animation, reduced motion, and cancellation. Theme styles own colors and visual presentation within this shared layout.
 
 `SessionHeader.svelte` presents load state, source information, resume copying, appearance, filters, and panel actions. Loaded/Idle is a badge; Reset is separate. The common status controller coordinates user-facing action results and errors without duplicating feedback in each panel.
 
-`system_fonts.rs` uses Windows DirectWrite to enumerate installed families. Text and Code choices map independently to CSS variables; empty values mean Default. Settings use WebView local storage key `observatory.fonts.v1`; unavailable saved families revert to Default. Character fallback is system-dependent, and a proportional Code choice is not silently replaced. No comparison font assets are bundled.
+`system_fonts.rs` uses Windows DirectWrite to enumerate installed families. Text and Code choices map independently to CSS variables; empty values mean Default. Settings use WebView local storage key `observatory.fonts.v1`; unavailable saved families revert to Default. Character fallback is system-dependent. The selected Code family stays in use even when it is proportional. Fonts come from the local Windows installation.
 
 ## Collection and output boundaries
 
 `lib/collection/` owns selection, read-only presentation, and clipboard serialization. Items retain snapshots and original unfiltered indexes. Source order is independent of click order and timestamps; duplicate occurrences have independent identities. Refresh, filters, and themes preserve snapshots and panel state. A different source or Reset clears Collection and closes it. Copy All keeps selections; Clear leaves the panel open. Collection is not persisted across restarts.
 
-Collection shows parsed text, not reconstructed JSONL records. General prose follows Text and actual code/log segments follow Code; the whole Collection is not code-only. Markdown fences, line breaks, and indentation remain without visual Markdown rendering.
+Collection shows parsed message text. General prose follows Text; code and log segments follow Code. Markdown fences, line breaks, and indentation remain in their original text form.
 
 Collection serializes selected snapshots, Capture serializes the transcript presentation, and Worklog reads the complete source in Rust. Filters and Collection are not passed to the exporter. Existing manifest compatibility, staging, and overwrite safeguards remain in the backend.
 
-Desktop parse/Export commands schedule blocking work away from the native message thread. Shared file-operation serialization is acquired before worker scheduling and held until completion. This protects native responsiveness and limits concurrent file work; it does not remove IPC or renderer costs. See [Performance History](../docs/performance-history.md) for measurements and rejected approaches.
+Desktop parse/Export commands schedule blocking work away from the native message thread. Shared file-operation serialization is acquired before worker scheduling and held until completion. This protects native responsiveness and limits concurrent file work. IPC delivery and rendering remain separate stages. See [Performance History](../docs/performance-history.md) for measurements and rejected approaches.
 
 ## Update availability
 
@@ -49,7 +49,7 @@ npm ci
 npm run tauri:dev
 ```
 
-The command adapter is in `src-tauri/`; parsing and session business rules remain in the backend crate. Follow the [test matrix](../docs/test-matrix.md) for Node-only tests, client DOM tests, static checks, Rust tests, and the full repository `verify.ps1` sequence. Browser integration uses an installed browser and isolated profiles; it does not replace native clipboard/dialog or packaged-EXE checks.
+The command adapter is in `src-tauri/`; parsing and session business rules remain in the backend crate. Follow the [test matrix](../docs/test-matrix.md) for Node-only tests, client DOM tests, static checks, Rust tests, and the full repository `verify.ps1` sequence. Browser integration uses an installed browser and isolated profiles. Verify native clipboard, dialog, and desktop behavior in the packaged EXE.
 
 ## Windows builds and version metadata
 

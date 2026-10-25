@@ -156,8 +156,7 @@ is reported explicitly.
 
 ## Manual Verification Boundaries
 
-Automated checks do not replace targeted observation of user-visible or
-platform behavior. Manual verification is expected when a change affects:
+Combine automated checks with targeted manual verification when a change affects:
 
 - native file or folder dialogs;
 - clipboard operations or transcript capture presentation;
@@ -185,8 +184,8 @@ and Resume Command notice space as status text appears and clears.
 ## Verification Reporting
 
 Historical performance measurements, adoption decisions, and their limitations
-are recorded in [performance-history.md](performance-history.md). Those
-observations do not replace the current verification requirements below.
+are recorded in [performance-history.md](performance-history.md). Apply the
+following verification requirements to the current change.
 
 Every implementation report must state the verification status. Record each
 applicable check as one of:
@@ -197,5 +196,5 @@ applicable check as one of:
 - **Not applicable**: use only when the change does not reach that verification
   boundary.
 
-A successful build is not evidence that tests passed. A successful test run is
-not approval to commit, push, tag, publish, or change release state.
+Report build and test results separately. Commits, pushes, tags, publication,
+and other release state changes require explicit user approval.
