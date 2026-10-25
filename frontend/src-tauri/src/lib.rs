@@ -24,6 +24,25 @@ async fn list_system_fonts() -> api::ApiResult<Vec<system_fonts::SystemFont>> {
 #[derive(Default)]
 struct NavigatorState(Arc<NavigatorService>);
 
+// Await the shared gate before scheduling blocking work. Keep its owned guard in
+// the worker so dropping a command future cannot allow overlapping file jobs.
+#[derive(Default, Clone)]
+struct FileCommandTasks(Arc<tauri::async_runtime::Mutex<()>>);
+
+impl FileCommandTasks {
+    async fn run<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, tauri::Error> {
+        let permit = Arc::clone(&self.0).lock_owned().await;
+        tauri::async_runtime::spawn_blocking(move || {
+            let _permit = permit;
+            work()
+        })
+        .await
+    }
+}
+
 fn navigator_task_error(error: impl std::fmt::Display) -> api::ErrorResponseDto {
     api::ErrorResponseDto::new("navigator_task_failed", error.to_string())
 }
@@ -102,17 +121,19 @@ async fn open_navigator_containing_folder(
 #[tauri::command]
 async fn export_navigator_worklog(
     state: tauri::State<'_, NavigatorState>,
+    tasks: tauri::State<'_, FileCommandTasks>,
     request: NavigatorTargetRequestDto,
     parent_directory: String,
 ) -> api::ApiResult<ExportWorklogResponse> {
     let service = Arc::clone(&state.inner().0);
-    tauri::async_runtime::spawn_blocking(move || {
-        let path = service.resolve_target(request)?;
-        export_worklog(path.to_string_lossy().into_owned(), parent_directory)
-            .map_err(|error| api::ErrorResponseDto::new(error.error.code, error.error.message))
-    })
-    .await
-    .map_err(navigator_task_error)?
+    tasks
+        .run(move || {
+            let path = service.resolve_target(request)?;
+            export_worklog_blocking(path.to_string_lossy().into_owned(), parent_directory)
+                .map_err(|error| api::ErrorResponseDto::new(error.error.code, error.error.message))
+        })
+        .await
+        .map_err(navigator_task_error)?
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -137,14 +158,20 @@ impl From<TauriFilterDto> for api::FilterDto {
 }
 
 #[tauri::command]
-fn parse_selected_jsonl(
+async fn parse_selected_jsonl(
+    tasks: tauri::State<'_, FileCommandTasks>,
     path: String,
     filter: TauriFilterDto,
 ) -> api::ApiResult<api::ParseResponseDto> {
-    api::parse_for_transport(ParseBoundaryRequest {
-        path,
-        filter: Some(filter.into()),
-    })
+    tasks
+        .run(move || {
+            api::parse_for_transport(ParseBoundaryRequest {
+                path,
+                filter: Some(filter.into()),
+            })
+        })
+        .await
+        .map_err(|error| api::ErrorResponseDto::new("parse_file_failed", error.to_string()))?
 }
 
 #[tauri::command]
@@ -191,7 +218,23 @@ struct ExportWorklogResponse {
 }
 
 #[tauri::command]
-fn export_worklog(
+async fn export_worklog(
+    tasks: tauri::State<'_, FileCommandTasks>,
+    source_path: String,
+    parent_directory: String,
+) -> Result<ExportWorklogResponse, TauriErrorResponse> {
+    tasks
+        .run(move || export_worklog_blocking(source_path, parent_directory))
+        .await
+        .map_err(|error| TauriErrorResponse {
+            error: TauriApiError {
+                code: "worklog_export_failed",
+                message: error.to_string(),
+            },
+        })?
+}
+
+fn export_worklog_blocking(
     source_path: String,
     parent_directory: String,
 ) -> Result<ExportWorklogResponse, TauriErrorResponse> {
@@ -269,6 +312,7 @@ fn resolve_jsonl_initial_directory(remembered_directory: Option<String>) -> Stri
 pub fn run() {
     tauri::Builder::default()
         .manage(NavigatorState::default())
+        .manage(FileCommandTasks::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -291,6 +335,85 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_jobs_run_off_the_calling_thread_and_preserve_errors() {
+        let caller = std::thread::current().id();
+        let tasks = FileCommandTasks::default();
+        let result = tauri::async_runtime::block_on(tasks.run(move || {
+            assert_ne!(std::thread::current().id(), caller);
+            Err::<(), _>("original failure")
+        }))
+        .unwrap();
+        assert_eq!(result, Err("original failure"));
+    }
+
+    #[test]
+    fn file_jobs_serialize_shared_command_work() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let tasks = FileCommandTasks::default();
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        tauri::async_runtime::block_on(async {
+            let mut jobs = Vec::new();
+            for value in 0..8 {
+                let tasks = tasks.clone();
+                let active = Arc::clone(&active);
+                let peak = Arc::clone(&peak);
+                jobs.push(tauri::async_runtime::spawn(async move {
+                    tasks
+                        .run(move || {
+                            let count = active.fetch_add(1, Ordering::SeqCst) + 1;
+                            peak.fetch_max(count, Ordering::SeqCst);
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                            active.fetch_sub(1, Ordering::SeqCst);
+                            value
+                        })
+                        .await
+                        .unwrap()
+                }));
+            }
+            for (expected, job) in jobs.into_iter().enumerate() {
+                assert_eq!(job.await.unwrap(), expected);
+            }
+        });
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn dropping_command_future_keeps_gate_until_worker_finishes() {
+        let tasks = FileCommandTasks::default();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let running_tasks = tasks.clone();
+        let job = tauri::async_runtime::spawn(async move {
+            running_tasks
+                .run(move || {
+                    started_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                })
+                .await
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        job.abort();
+        assert!(tasks.0.try_lock().is_err());
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(tasks.run(|| 42)).unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn panicked_file_job_releases_gate_for_next_command() {
+        let tasks = FileCommandTasks::default();
+        let result = tauri::async_runtime::block_on(tasks.run(|| panic!("synthetic worker panic")));
+        assert!(result.is_err());
+        assert_eq!(tauri::async_runtime::block_on(tasks.run(|| 7)).unwrap(), 7);
+    }
 
     #[test]
     fn navigator_transport_contract_shares_snapshot_and_serializes_sources() {
