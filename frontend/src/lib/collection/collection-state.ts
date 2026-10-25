@@ -39,6 +39,23 @@ export function identifyMessages(
   return keys
 }
 
+/** Reuse keys for the current immutable workflow snapshot only. A new array
+ * (including Refresh) or path rebuilds them with the same identity rules.
+ */
+export function createMessageIdentifier(): typeof identifyMessages {
+  let previousPath: string | undefined
+  let previousBlocks: readonly TranscriptBlockDto[] | undefined
+  let keys: ReadonlyMap<TranscriptBlockDto, string> = new Map()
+  return (sourcePath, blocks) => {
+    if (sourcePath !== previousPath || blocks !== previousBlocks) {
+      keys = identifyMessages(sourcePath, blocks)
+      previousPath = sourcePath
+      previousBlocks = blocks
+    }
+    return keys
+  }
+}
+
 export function toggleCollectedMessage(
   state: CollectionState,
   id: string,

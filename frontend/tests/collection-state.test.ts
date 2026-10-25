@@ -7,6 +7,7 @@ import {
   collectionForSelectedPath,
   createCollectionState,
   identifyMessages,
+  createMessageIdentifier,
   serializeCollection,
   toggleCollectedMessage,
 } from '../src/lib/collection/collection-state.ts'
@@ -19,6 +20,38 @@ import type { ParseResponseDto, TranscriptBlockDto } from '../src/lib/parse-cont
 const message = (content = 'Original message'): TranscriptBlockDto => ({
   entry_type: 'you', label: '[YOU]', title: '[YOU]',
   timestamp: '2026-10-23T12:00:00Z', content,
+})
+
+test('current message identifier reuses only an unchanged source array and path', () => {
+  const identifyCurrent = createMessageIdentifier()
+  const all = [message('A'), message('Duplicate'), message('Duplicate')]
+  const first = identifyCurrent('one.jsonl', all)
+  assert.equal(identifyCurrent('one.jsonl', all), first)
+  assert.notEqual(first.get(all[1]), first.get(all[2]))
+  const state = { ...createInitialLoadWorkflowState(), all_observations: { transcript_blocks: all, referenced_conversations: [] } }
+  const filtered = updateFilter(state, 'show_you', false)
+  assert.equal(identifyCurrent('one.jsonl', filtered.all_observations.transcript_blocks), first)
+  const refreshed = structuredClone(all)
+  const next = identifyCurrent('one.jsonl', refreshed)
+  assert.notEqual(next, first)
+  assert.deepEqual([...next.values()], [...first.values()])
+  assert.equal(next.get(all[0]), undefined, 'new map does not keep old DTO keys')
+  const other = identifyCurrent('other.jsonl', refreshed)
+  assert.notDeepEqual([...other.values()], [...next.values()])
+  assert.notEqual(identifyCurrent('one.jsonl', all), first, 'past sources are not cached')
+  const empty: TranscriptBlockDto[] = []
+  assert.equal(identifyCurrent('', empty).size, 0)
+  assert.equal(identifyCurrent('', empty), identifyCurrent('', empty))
+})
+
+test('refreshed duplicate occurrences keep existing keys and append a distinct key', () => {
+  const identifyCurrent = createMessageIdentifier()
+  const original = [message('Duplicate'), message('Duplicate')]
+  const keys = [...identifyCurrent('session.jsonl', original).values()]
+  const refreshed = [...structuredClone(original), message('Duplicate')]
+  const next = [...identifyCurrent('session.jsonl', refreshed).values()]
+  assert.deepEqual(next.slice(0, 2), keys)
+  assert.equal(new Set(next).size, 3)
 })
 
 test('collection restores source order when a middle message is removed and reselected', () => {

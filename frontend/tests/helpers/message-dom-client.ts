@@ -7,6 +7,7 @@ import Host from '../fixtures/MessageContentHost.svelte';
 import { buildMessageDom, mountMessageDom } from '../../src/lib/rendering/message-dom.ts';
 import { parseMessageMarkdown } from '../../src/lib/rendering/message-semantics.ts';
 import { serializeTranscript } from '../../src/lib/rendering/transcript-capture.ts';
+import { identifyMessages } from '../../src/lib/collection/collection-state.ts';
 import '../../src/app.css';
 import '../../src/lib/rendering/transcript.css';
 const target = document.querySelector('#target') as HTMLElement;
@@ -63,7 +64,7 @@ const cases: Record<string, () => Promise<void>> = {
             target.dataset.theme = theme;
             const props = { theme, isLoaded: true, publicReleaseStatus: null, showIdentityNote: false, observedEventCounts: [], blocks: [block(content), block(content, 'codex'), block('Tool call 한글', 'tool_call'), block('Tool result 한글', 'tool_result'), block('System 한글', 'system')], references: [], collapsedBlocks: {}, onToggleBlock: () => {} };
             const capture = serializeTranscript({ ...props, theme: theme as any });
-            const instance = mount(Host, { target, props: { component: component as any, props } });
+            const instance = mount(Host, { target, props: { component: component as any, props: { ...props, messageIds: identifyMessages('fixture.jsonl', props.blocks as any) } } });
             try {
                 await settle();
                 await document.fonts.ready;
@@ -96,7 +97,7 @@ const cases: Record<string, () => Promise<void>> = {
         for (const [theme, component] of themes.slice(1)) {
             target.dataset.theme = theme;
             for (const status of ['current', 'development', 'update-available']) {
-                const props = { theme, isLoaded: false, publicReleaseStatus: { status, currentVersion: '1.3.0', latestVersion: '1.4.0' }, showIdentityNote: true, observedEventCounts: [], blocks: [], references: [], collapsedBlocks: {}, collectedBlocks: [], onToggleBlock: () => {}, onToggleCollection: () => {} };
+                const props = { theme, isLoaded: false, publicReleaseStatus: { status, currentVersion: '1.3.0', latestVersion: '1.4.0' }, showIdentityNote: true, observedEventCounts: [], blocks: [], messageIds: new Map(), references: [], collapsedBlocks: {}, collectedBlocks: [], onToggleBlock: () => {}, onToggleCollection: () => {} };
                 const instance = mount(Host, { target, props: { component: component as any, props } });
                 try {
                     await settle();
@@ -142,7 +143,7 @@ const cases: Record<string, () => Promise<void>> = {
             target.replaceChildren();
             const blocks = [block(source), block('**technical**', 'tool_result'), block(tableSource)];
             let collapsedBlocks: Record<number, boolean> = {};
-            const props = { theme, isLoaded: true, publicReleaseStatus: null, showIdentityNote: false, observedEventCounts: [], blocks, references: [], collapsedBlocks, onToggleBlock: (index: number) => { collapsedBlocks = { ...collapsedBlocks, [index]: !collapsedBlocks[index] }; instance.replace({ ...props, collapsedBlocks }); } };
+            const props = { theme, isLoaded: true, publicReleaseStatus: null, showIdentityNote: false, observedEventCounts: [], blocks, messageIds: identifyMessages('fixture.jsonl', blocks as any), references: [], collapsedBlocks, onToggleBlock: (index: number) => { collapsedBlocks = { ...collapsedBlocks, [index]: !collapsedBlocks[index] }; instance.replace({ ...props, collapsedBlocks }); } };
             const before = JSON.stringify(blocks);
             const captured = serializeTranscript({ ...props, theme: theme as any });
             const instance = mount(Host, { target, props: { component: component as any, props } });

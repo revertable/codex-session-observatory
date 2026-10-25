@@ -34,7 +34,7 @@
   import TranscriptViewer from './lib/rendering/TranscriptViewer.svelte'
   import CollectionPanel from './lib/collection/CollectionPanel.svelte'
   import {
-    createCollectionState, collectionForSelectedPath, identifyMessages,
+    createCollectionState, collectionForSelectedPath, createMessageIdentifier,
     toggleCollectedMessage, clearCollection,
   } from './lib/collection/collection-state'
   import { serializeTranscript } from './lib/rendering/transcript-capture'
@@ -58,7 +58,8 @@
   let sessionsOpen = true
   let transcriptViewport: HTMLElement | undefined
   let loadGeneration = 0
-  $: messageIds = identifyMessages(
+  const identifyCurrentMessages = createMessageIdentifier()
+  $: messageIds = identifyCurrentMessages(
     workflow.selected_file.path,
     workflow.all_observations.transcript_blocks,
   )
@@ -428,6 +429,7 @@
           {publicReleaseStatus}
           observedEventCounts={workflow.loaded_file.observed_event_counts}
           blocks={workflow.observations.transcript_blocks}
+          {messageIds}
           references={workflow.observations.referenced_conversations}
           {collapsedBlocks}
           onToggleBlock={toggleTranscriptBlock}

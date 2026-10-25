@@ -20,6 +20,7 @@
     showIdentityNote: boolean
     observedEventCounts: ObservedEventCountDto[]
     blocks: TranscriptBlockDto[]
+    messageIds: ReadonlyMap<TranscriptBlockDto, string>
     references: ReferencedConversationDto[]
     collapsedBlocks: Readonly<Record<number, boolean>>
     onToggleBlock: (index: number) => void
@@ -34,6 +35,7 @@
     showIdentityNote,
     observedEventCounts,
     blocks,
+    messageIds,
     references,
     collapsedBlocks,
     onToggleBlock,
@@ -96,7 +98,7 @@
 
       <div class="terminal-blank" aria-hidden="true"></div>
     {:else}
-      {#each blocks as block, index}
+      {#each blocks as block, index (messageIds.get(block))}
         {@const label = renderLabelForKind(block.entry_type, block.label)}
         {@const isCollapsed = collapsedBlocks[index] ?? false}
         {@const timestamp = formatEntryTimestamp(block.timestamp)}

@@ -19,6 +19,7 @@
     publicReleaseStatus: PublicReleaseStatus | null
     observedEventCounts: ObservedEventCountDto[]
     blocks: TranscriptBlockDto[]
+    messageIds: ReadonlyMap<TranscriptBlockDto, string>
     references: ReferencedConversationDto[]
     collapsedBlocks: Readonly<Record<number, boolean>>
     onToggleBlock: (index: number) => void
@@ -32,6 +33,7 @@
     publicReleaseStatus,
     observedEventCounts,
     blocks,
+    messageIds,
     references,
     collapsedBlocks,
     onToggleBlock,
@@ -95,7 +97,7 @@
       </section>
     {:else}
       <div class="chat-blocks">
-        {#each blocks as block, index}
+        {#each blocks as block, index (messageIds.get(block))}
           {@const label = renderLabelForKind(block.entry_type, block.label)}
           {@const isCollapsed = collapsedBlocks[index] ?? false}
           {@const timestamp = formatEntryTimestamp(block.timestamp)}

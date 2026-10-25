@@ -216,6 +216,12 @@ for (const name of [
 }
 
 
+test('filtered messages retain DOM, current handlers, duplicate identity and Refresh across four themes', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/filter-reuse-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try { await app.evaluate('globalThis.__filterReuseCase()') }
+  finally { await app.close() }
+})
+
 test('App retains transcript through refresh, append and failure while preserving initial load', { timeout: 60000 }, async () => {
   const refreshHarness = await startClientHarness({
     entry: fileURLToPath(new URL('./helpers/refresh-client.ts', import.meta.url)).replaceAll('\\', '/'),
