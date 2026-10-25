@@ -131,6 +131,7 @@ The Svelte frontend is the Control Room.
 It should handle:
 
 * file/path input flow
+* Session Navigator browsing, selection, and list reload
 * parsed observation display
 * filter controls
 * view mode controls
@@ -146,6 +147,7 @@ Current responsibility-oriented component areas include:
 
 ```text
 frontend/src/lib/control-room/
+frontend/src/lib/session-navigator/
 frontend/src/lib/rendering/
 frontend/src/lib/collection/
 frontend/src/lib/load-workflow.ts
@@ -169,10 +171,13 @@ selection; selecting another JSONL or resetting the session clears selection
 and closes the panel. This in-memory workspace is independent of filtered
 Transcript capture and full-session backend Worklog export.
 
-`AppLayout.svelte` owns the current Transcript and Collection columns;
-`TranscriptViewer.svelte` selects a renderer. A future left Session Navigator
-can be added beside these columns, but is not currently implemented. Detailed
-frontend contracts and source-build instructions are in
+`AppLayout.svelte` owns the **Sessions / Transcript / Collection** Grid, shared
+available height, resizable panel boundaries, and independent Sessions and
+Collection visibility. Each panel has its own scroll viewport.
+`SessionNavigator.svelte` provides Flat and Hierarchical session browsing and
+connects selection to the shared Transcript loading workflow.
+`TranscriptViewer.svelte` selects a renderer. Detailed frontend contracts and
+source-build instructions are in
 [frontend/README.md](../frontend/README.md).
 
 ---

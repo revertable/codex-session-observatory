@@ -10,7 +10,7 @@ Codex Session Observatory is a Windows desktop tool for browsing and reading loc
 
 I develop and maintain this independently as a personal, one-developer project. I also use it continuously in my own Codex work. Development is **Validation-first**: I add capabilities whose usefulness becomes clear in actual use, and investigate and verify problems before changing behavior.
 
-Practical value, accuracy, and preservation of original records matter more to me than the number of features. The app keeps message order and context visible so you can choose which records to read, collect, and reuse. This is also why I have declined usage visualization when local records cannot support trustworthy figures.
+Practical value, accuracy, and preservation of original records matter more to me than the number of features. The app keeps message order and context visible so you can choose which records to read, collect, and reuse.
 
 ## Get started
 
@@ -45,7 +45,7 @@ I built Collection to make that part of my own workflow easier. Select the messa
 | --- | --- |
 | **Capture Transcript**, in the Transcript header | Copies a text presentation using the current filters, theme, and collapsed/expanded state |
 | Message **+ / ✓** controls and Collection **Copy All** | Collects selected message snapshots and copies them in original transcript order |
-| **Resume command** copy control | Copies `codex resume <session-id>` when available; the app does not execute it |
+| **Resume command** copy control | Copies `codex resume <session-id>` for use in Codex when the session ID is available |
 | **Export Worklog**, in the toolbar or a session's context menu | Exports the complete source session independently of filters, collapse state, and Collection |
 
 Collected messages stay in their original transcript order, with role headers, available local timestamps, Markdown fences, line breaks, and indentation preserved. **Copy All** keeps the selection; **Clear** empties it.
@@ -59,13 +59,6 @@ Each human request begins a Worklog unit containing the following Codex response
 The top-header and Transcript-header **Refresh** controls reread the current session. The last successful transcript remains visible during loading and after a failed refresh. Collection snapshots, source order, and panel state survive Refresh, filters, and theme changes. Hiding a panel keeps its state.
 
 The **Loaded** badge reports state; the adjacent **X** resets the loaded session. Selecting a different session or resetting clears Collection and closes its panel. Collection is also cleared when the app exits. The common **Status** line reports action results, progress, warnings, and errors.
-
-## Current non-goals
-
-- Running or replacing Codex itself.
-- Editing or rewriting source JSONL records.
-- Tracking Codex usage, token consumption, remaining allowance, or rate limits as an account dashboard. Local logs and related metadata can be incomplete or delayed, leaving account-wide usage unverified.
-- Permanent Collection storage or session backups. Copy or export material you need to retain.
 
 ## Local processing and project information
 
