@@ -1,4 +1,4 @@
-Codex Session Observatory 2.0.0 - Portable Windows Build
+Codex Session Observatory 2.0.1 - Portable Windows Build
 =====================================================
 
 English
@@ -10,6 +10,7 @@ Choose a local Codex session in Sessions to open its Transcript.
 Sessions reads CODEX_HOME/sessions, or %USERPROFILE%\.codex\sessions by default.
 
 - Sessions: browse Flat or Hierarchical; Reload Sessions refreshes the list.
+  Your view choice is saved on this device and restored when the app reopens.
   Right-click a session to open it, open its folder, or export its Worklog.
 - Workspace: independently hide or resize Sessions and Collection. Each panel
   scrolls separately and has its own Top/Bottom controls.
@@ -42,6 +43,7 @@ Sessions에서 로컬 Codex 세션을 선택하면 Transcript에 불러옵니다
 CODEX_HOME/sessions 또는 기본 %USERPROFILE%\.codex\sessions를 조회합니다.
 
 - Sessions: Flat/Hierarchical로 탐색하고 Reload Sessions로 목록을 갱신합니다.
+  보기 선택은 현재 기기에 저장되며 앱을 다시 열면 복원합니다.
   세션 우클릭 메뉴에서 열기, 폴더 열기, Worklog 내보내기를 제공합니다.
 - 작업 공간: Sessions와 Collection을 각각 숨기거나 너비를 조절합니다.
   각 패널은 독립적으로 스크롤하며 Top/Bottom 컨트롤을 제공합니다.

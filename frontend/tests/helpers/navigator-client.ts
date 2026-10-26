@@ -3,6 +3,7 @@ import App from '../../src/App.svelte'
 import '../../src/app.css'
 import '../../src/lib/rendering/transcript.css'
 import type { SessionSummary, SessionPage, SessionHierarchy } from '../../src/lib/session-navigator/contract'
+import { navigatorModePreferenceKey } from '../../src/lib/session-navigator/state'
 import type { ParseResponseDto, TranscriptBlockDto } from '../../src/lib/parse-contract'
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message) }
@@ -857,6 +858,42 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
   }
 }
 
+
+;(globalThis as any).__navigatorModePreferenceCase = async () => {
+  localStorage.removeItem(navigatorModePreferenceKey)
+  let instance = mount(App, { target }); await settle()
+  try {
+    assert(mode() === 'Flat', 'missing preference defaults to Flat')
+    await toggle()
+    assert(mode() === 'Hierarchical', 'switch to Hierarchical')
+    assert(localStorage.getItem(navigatorModePreferenceKey) === 'Hierarchical', 'hierarchical choice saved')
+    await unmount(instance)
+    const trees = hierarchyCalls
+    instance = mount(App, { target }); await settle()
+    assert(mode() === 'Hierarchical', 'hierarchical choice restored on remount')
+    assert(hierarchyCalls === trees + 1 && row(42), 'restored view loads hierarchy from the new snapshot')
+    verifyNavigatorHeader()
+    await toggle()
+    assert(localStorage.getItem(navigatorModePreferenceKey) === 'Flat', 'flat choice saved')
+    await unmount(instance)
+    instance = mount(App, { target }); await settle()
+    assert(mode() === 'Flat', 'flat choice restored on remount')
+    await unmount(instance)
+    localStorage.setItem(navigatorModePreferenceKey, 'unknown')
+    instance = mount(App, { target }); await settle()
+    assert(mode() === 'Flat', 'invalid choice defaults to Flat')
+    const originalSet = Storage.prototype.setItem
+    try {
+      Storage.prototype.setItem = () => { throw new Error('Synthetic storage denial') }
+      await toggle()
+      assert(mode() === 'Hierarchical' && row(42), 'storage denial preserves view switch and loading')
+      assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be saved'), 'storage warning is visible')
+    } finally { Storage.prototype.setItem = originalSet }
+  } finally {
+    await unmount(instance)
+    localStorage.removeItem(navigatorModePreferenceKey)
+  }
+}
 
 ;(globalThis as any).__fontCase = async () => {
   const key = 'observatory.fonts.v1'

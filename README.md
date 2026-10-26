@@ -27,6 +27,8 @@ The workspace has **Sessions / Transcript / Collection** panels. Sessions and Co
 - **Flat** shows sessions by their original creation time, newest first, and loads more as you scroll.
 - **Hierarchical** follows year/month/day folders. Sessions outside those folders remain available in a separate group.
 
+Your Flat/Hierarchical choice is saved on this device and restored when you reopen the app. Flat is the default when no valid saved choice is available.
+
 Both views use the same list of ordinary and ChatGPT Handoff sessions. Archived sessions and Guardian reviews are excluded from this list. Titles come from metadata available on this device; **Untitled Session** and its information tooltip identify records without title metadata. Recent conversation activity affects title emphasis, not list order.
 
 Selecting a session opens it in Transcript. Right-click a session for **Open**, **Open Containing Folder**, or **Export Worklog**. Folder opening and exporting an unselected session keep the current transcript and Collection intact.

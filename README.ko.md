@@ -27,6 +27,8 @@ Codex Session Observatory는 로컬 Codex 세션 기록을 탐색하고 읽는 W
 - **Flat**: 세션의 최초 생성 시각이 최신인 순서로 표시하며, 스크롤하면 다음 항목을 불러옵니다.
 - **Hierarchical**: 실제 연도·월·날짜 폴더 구조를 따릅니다. 해당 폴더 밖의 세션도 별도 그룹에서 찾을 수 있습니다.
 
+Flat/Hierarchical 선택은 현재 기기에 저장되며 앱을 다시 열면 복원합니다. 유효한 저장값이 없으면 Flat으로 시작합니다.
+
 두 모드는 같은 일반·ChatGPT Handoff 세션 목록을 사용합니다. Archived 세션과 Guardian review 세션은 이 목록에서 제외합니다. 제목은 현재 기기에서 확인할 수 있는 메타데이터를 사용합니다. 제목 정보가 없으면 **Untitled Session**과 정보 툴팁으로 표시합니다. 최근 대화 활동은 제목 강조에만 사용하며 목록 순서를 바꾸지 않습니다.
 
 세션을 선택하면 Transcript에 불러옵니다. 항목을 우클릭하면 **Open**, **Open Containing Folder**, **Export Worklog**를 사용할 수 있습니다. 폴더 열기와 선택하지 않은 세션의 내보내기는 현재 Transcript와 Collection을 유지합니다.

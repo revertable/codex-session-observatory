@@ -3,6 +3,7 @@ import type { ApiErrorDto } from '../parse-contract'
 import type { NavigatorApi, SessionHierarchy, SessionPage, SessionSummary } from './contract'
 
 export type NavigatorMode = 'Flat' | 'Hierarchical'
+export const navigatorModePreferenceKey = 'observatory.navigator-mode.v1'
 export interface NavigatorState {
   mode: NavigatorMode
   page: SessionPage | null
@@ -37,8 +38,16 @@ function asError(error: unknown): ApiErrorDto {
 }
 
 /** Independent from transcript state. A generation owns all requests on a snapshot. */
-export function createNavigator(api: NavigatorApi, feedback?: StatusController) {
-  let state: NavigatorState = { mode: 'Flat', page: null, hierarchy: null, loading: false,
+export function createNavigator(api: NavigatorApi, feedback?: StatusController,
+  preferences?: Pick<Storage, 'getItem' | 'setItem'>) {
+  let mode: NavigatorMode = 'Flat'
+  try {
+    if (preferences?.getItem(navigatorModePreferenceKey) === 'Hierarchical') mode = 'Hierarchical'
+  } catch {
+    const token = feedback?.begin('navigator-mode')
+    feedback?.finish(token, 'warning', 'Saved session view could not be read. Using Flat.')
+  }
+  let state: NavigatorState = { mode, page: null, hierarchy: null, loading: false,
     loadingMore: false, loadingHierarchy: false, error: null, failedAction: null }
   let generation = 0
   const listeners = new Set<(state: NavigatorState) => void>()
@@ -115,6 +124,13 @@ export function createNavigator(api: NavigatorApi, feedback?: StatusController) 
     reload, more,
     async toggle() {
       publish({ mode: state.mode === 'Flat' ? 'Hierarchical' : 'Flat' })
+      const token = feedback?.begin('navigator-mode')
+      try {
+        preferences?.setItem(navigatorModePreferenceKey, state.mode)
+        feedback?.finish(token)
+      } catch {
+        feedback?.finish(token, 'warning', 'Session view applies for this session, but could not be saved.')
+      }
       if (state.mode === 'Hierarchical' && !state.error) await hierarchy()
     },
     async retry() {

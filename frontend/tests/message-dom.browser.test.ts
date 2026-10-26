@@ -167,6 +167,14 @@ test('default and minimum layouts remain usable under Full HD and 4K DPI emulati
   } finally { await workspace.close() }
 })
 
+test('Session Navigator view choice persists across app mounts and tolerates storage failure', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({
+    entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/'),
+  })
+  try { await app.evaluate('globalThis.__navigatorModePreferenceCase()') }
+  finally { await app.close() }
+})
+
 test('Session Navigator pages, hierarchy, badges, selection and Reload preserve the existing workspace', { timeout: 60000 }, async () => {
   const navigatorHarness = await startClientHarness({
     entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/'),

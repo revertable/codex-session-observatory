@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createNavigator, matchesSelection, sessionPathKey, titleWeight } from '../src/lib/session-navigator/state.ts'
+import { createNavigator, matchesSelection, navigatorModePreferenceKey, sessionPathKey, titleWeight } from '../src/lib/session-navigator/state.ts'
+import { createStatusController } from '../src/lib/control-room/status-line.ts'
 import { sessionTitlePresentation } from '../src/lib/session-navigator/title-presentation.ts'
 import type { NavigatorApi, SessionPage, SessionHierarchy, SessionSummary } from '../src/lib/session-navigator/contract.ts'
 
@@ -16,13 +17,68 @@ const tree = (snapshot: string): SessionHierarchy => ({ snapshot_id: snapshot, s
   unfiled_items: [], diagnostics: page().diagnostics })
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: unknown) => void
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
-function setup(overrides: Partial<NavigatorApi> = {}) {
+function setup(overrides: Partial<NavigatorApi> = {}, preferences?: Pick<Storage, 'getItem' | 'setItem'>,
+  feedback?: ReturnType<typeof createStatusController>) {
   const api: NavigatorApi = { reload: async () => page(), flat: async () => page([1]), hierarchy: async snapshot => tree(snapshot), ...overrides }
-  const navigator = createNavigator(api)
+  const navigator = createNavigator(api, feedback, preferences)
   let state!: Parameters<Parameters<typeof navigator.subscribe>[0]>[0]
   navigator.subscribe(value => { state = value })
   return { navigator, get state() { return state } }
 }
+
+test('view preference restores both modes and loads hierarchy on the fresh snapshot', async () => {
+  const saved = new Map<string, string>()
+  const preferences = { getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => { saved.set(key, value) } }
+  const initial = setup({}, preferences)
+  assert.equal(initial.state.mode, 'Flat')
+  assert.equal(saved.size, 0, 'initialization does not overwrite preferences')
+  await initial.navigator.toggle()
+  assert.equal(saved.get(navigatorModePreferenceKey), 'Hierarchical')
+  initial.navigator.dispose()
+
+  const snapshots: string[] = []
+  const restored = setup({ hierarchy: async snapshot => { snapshots.push(snapshot); return tree(snapshot) } }, preferences)
+  assert.equal(restored.state.mode, 'Hierarchical')
+  await restored.navigator.reload()
+  assert.deepEqual(snapshots, ['a'])
+  assert.equal(restored.state.hierarchy?.snapshot_id, restored.state.page?.snapshot_id)
+  await restored.navigator.toggle()
+  assert.equal(saved.get(navigatorModePreferenceKey), 'Flat')
+  restored.navigator.dispose()
+  assert.equal(setup({}, preferences).state.mode, 'Flat')
+})
+
+test('unknown saved modes default to Flat without overwriting storage', () => {
+  for (const value of [null, '', 'flat', 'hierarchical', '{invalid', 'Other', '"Hierarchical"']) {
+    const s = setup({}, { getItem: () => value,
+      setItem: () => { assert.fail('reading preferences must not write') } })
+    assert.equal(s.state.mode, 'Flat')
+    s.navigator.dispose()
+  }
+})
+
+test('unavailable preference storage keeps loading and switching with separate warnings', async () => {
+  const feedback = createStatusController()
+  let failWrite = true
+  const preferences = { getItem: () => { throw new Error('Storage denied') },
+    setItem: () => { if (failWrite) throw new Error('Storage denied') } }
+  const s = setup({}, preferences, feedback)
+  assert.equal(s.state.mode, 'Flat')
+  assert.match(feedback.current().message, /could not be read/)
+  await s.navigator.reload()
+  await s.navigator.toggle()
+  assert.equal(s.state.mode, 'Hierarchical')
+  assert.equal(s.state.hierarchy?.snapshot_id, 'a')
+  assert.equal(s.state.error, null)
+  assert.equal(feedback.current().severity, 'warning')
+  assert.match(feedback.current().message, /could not be saved/)
+  failWrite = false
+  await s.navigator.toggle()
+  assert.equal(s.state.mode, 'Flat')
+  assert.equal(feedback.current().severity, 'info')
+  s.navigator.dispose()
+})
 
 test('conversation emphasis uses elapsed 7/30-day boundaries and never creation dates', () => {
   const now = Date.UTC(2026, 9, 23); const day = 86400000

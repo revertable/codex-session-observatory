@@ -8,6 +8,8 @@ This directory contains the Svelte workspace and its Tauri desktop bridge. Rust 
 
 Flat uses snapshot-bound cursors and pages of 20 in original creation-time order. Hierarchical follows date folders and includes unfiled items. Reload replaces the snapshot and invalidates old cursors and action targets. The frontend coordinates generations, duplicate-request protection, loading/error feedback, and retry. Activity affects title weight only.
 
+The Flat/Hierarchical choice is saved in WebView local storage under `observatory.navigator-mode.v1` and restored on startup. Missing or invalid values default to Flat. Storage failures appear in Status while view switching remains available. Restoring Hierarchical loads its tree from the new Navigator snapshot.
+
 `App.svelte` reuses one load workflow for Navigator selection and parent-session navigation. A source load requests all observation kinds once; filters project retained blocks without reparsing. Plain and zstd-compressed JSONL share the transport contract. Context-menu Open uses the same selection flow; folder/Export commands revalidate snapshot identity and paths without replacing the selected transcript.
 
 ## Transcript rendering and state
@@ -61,4 +63,4 @@ If a verified release EXE already exists, package it without recompiling from th
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File frontend/src-tauri/scripts/package-portable.ps1 -ExecutablePath frontend/src-tauri/target/release/codex-session-observatory.exe
 ```
 
-Synchronize application versions in `frontend/package.json`, the npm lockfile's root and empty-path package, `backend/Cargo.toml`, `frontend/src-tauri/Cargo.toml`, and `frontend/src-tauri/tauri.conf.json`. Both Cargo locks reflect the local backend package, and the desktop lock also reflects `codex-session-observatory-tauri`. Third-party versions are independent. Tauri supplies runtime and Windows EXE metadata; inspect FileVersion and ProductVersion after building. Windows `2.0.0.0` corresponds to application `2.0.0`.
+Synchronize application versions in `frontend/package.json`, the npm lockfile's root and empty-path package, `backend/Cargo.toml`, `frontend/src-tauri/Cargo.toml`, and `frontend/src-tauri/tauri.conf.json`. Both Cargo locks reflect the local backend package, and the desktop lock also reflects `codex-session-observatory-tauri`. Third-party versions are independent. Tauri supplies runtime and Windows EXE metadata; inspect FileVersion and ProductVersion after building. Windows `2.0.1.0` corresponds to application `2.0.1`.

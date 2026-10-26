@@ -19,7 +19,10 @@
     onExport: (target: NavigatorTarget) => Promise<void>
   } = $props()
   const feedback = useStatus()!
-  const navigator = createNavigator(sessionNavigatorApi, feedback)
+  const navigator = createNavigator(sessionNavigatorApi, feedback, {
+    getItem: key => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+  })
   let viewport: HTMLDivElement | undefined = $state()
   let now = $state(Date.now())
   const nextMode = $derived($navigator.mode === 'Flat' ? 'Hierarchical' : 'Flat')
