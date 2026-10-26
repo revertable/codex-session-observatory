@@ -33,7 +33,7 @@ Flat/Hierarchical 선택은 현재 기기에 저장되며 앱을 다시 열면 �
 
 세션을 선택하면 Transcript에 불러옵니다. 항목을 우클릭하면 **Open**, **Open Containing Folder**, **Export Worklog**를 사용할 수 있습니다. 폴더 열기와 선택하지 않은 세션의 내보내기는 현재 Transcript와 Collection을 유지합니다.
 
-**Style**에서 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)**를 선택하고, **Filters**로 표시할 역할을 정합니다. 사용자·Codex 메시지는 Markdown 강조, 목록, 링크, 코드와 표를 공통으로 표현하고 도구 활동·메타데이터는 일반 텍스트로 표시합니다. 메시지 헤더를 클릭하면 본문을 접거나 펼칩니다. 시간이 있으면 로컬 시간으로 표시합니다.
+**Style**에서 **Terminal Style**, **Markdown Style**, **DM Style**, **DM Style (Dark)** 중 하나를 선택하고, **Filters**로 표시할 역할을 정합니다. 사용자·Codex 메시지는 Markdown 강조, 목록, 링크, 코드와 표를 공통으로 표현하고 도구 활동·메타데이터는 일반 텍스트로 표시합니다. 메시지 헤더를 클릭하면 본문을 접거나 펼칩니다. 시간이 있으면 로컬 시간으로 표시합니다.
 
 **Text**와 **Code**는 Windows에 설치된 글꼴을 각각 독립적으로 선택합니다. Default는 기존 앱의 글꼴 규칙을 유지합니다. 선택은 현재 기기에 저장되며, 지원하지 않는 문자의 대체 표시는 글꼴과 시스템에 따라 달라집니다. Code에 가변폭 글꼴을 선택하면 공백 기반 정렬이 달라질 수 있습니다.
 
