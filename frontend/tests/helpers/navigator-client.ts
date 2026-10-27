@@ -796,18 +796,6 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     checkHeaderRows()
     await click(row(0)); await click(target.querySelector('[aria-label="Add to Collection"]'))
     const stable = JSON.stringify(bounds())
-    const searchTarget = target.querySelector<HTMLSelectElement>('[aria-label="Search target"]')!
-    const query = target.querySelector<HTMLInputElement>('[aria-label="Search query"]')!
-    assert(searchTarget.value === 'Session' && query.placeholder === 'Search all sessions...', 'default Session search placeholder')
-    const beforeSearch = JSON.stringify([reloads, flatCalls, hierarchyCalls, parses, exportedTargets, target.querySelector('.transcript-content')!.innerHTML])
-    for (const scope of ['Transcript', 'Session']) {
-      searchTarget.value = scope; searchTarget.dispatchEvent(new Event('change', { bubbles: true })); await settle()
-      assert(query.placeholder === (scope === 'Session' ? 'Search all sessions...' : 'Search current transcript...'), 'placeholder updates immediately')
-      query.value = 'arbitrary query <>& 한글'; query.dispatchEvent(new Event('input', { bubbles: true })); await settle()
-      await click(target.querySelector('[aria-label="Search"]'))
-      assert(query.value === 'arbitrary query <>& 한글', 'query remains editable after submit')
-    }
-    assert(JSON.stringify([reloads, flatCalls, hierarchyCalls, parses, exportedTargets, target.querySelector('.transcript-content')!.innerHTML]) === beforeSearch, 'search submits have no backend, filtering or transcript side effects')
     assert(target.querySelector('.load-state')!.textContent === 'Loaded' && target.querySelector('.load-state')!.tagName === 'SPAN', 'Loaded badge is display only')
     assert([...target.querySelector('.header-controls')!.children].map(e => e.classList.contains('load-state') ? 'badge' : e.getAttribute('aria-label')).join() === 'badge,Refresh,Reset loaded session', 'header order is badge, Refresh, Reset')
     const resetButton = target.querySelector<HTMLButtonElement>('.reset-session-button')!

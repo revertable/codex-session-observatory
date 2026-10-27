@@ -4,6 +4,49 @@ import { createNavigator, matchesSelection, navigatorModePreferenceKey, sessionP
 import { createStatusController } from '../src/lib/control-room/status-line.ts'
 import { sessionTitlePresentation } from '../src/lib/session-navigator/title-presentation.ts'
 import type { NavigatorApi, SessionPage, SessionHierarchy, SessionSummary } from '../src/lib/session-navigator/contract.ts'
+import { createSearchState } from '../src/lib/search/search-state.ts'
+import { literalMatches } from '../src/lib/search/literal-search.ts'
+
+test('literal search maps Unicode expansions, emoji and regex punctuation to original offsets', () => {
+  assert.deepEqual(literalMatches('İ emoji😀 한글 [a]. İ', 'i'), [{ start: 0, end: 1 }, { start: 6, end: 7 }, { start: 18, end: 19 }])
+  assert.deepEqual(literalMatches('😀😀 [a].', '[a].'), [{ start: 5, end: 9 }])
+  assert.deepEqual(literalMatches('AbAB', 'ab'), [{ start: 0, end: 2 }, { start: 2, end: 4 }])
+  assert.deepEqual(literalMatches('anything', '   '), [])
+})
+
+test('shared draft survives scope changes; only submit updates applied queries and requests', () => {
+  const search = createSearchState()
+  let state!: Parameters<Parameters<typeof search.subscribe>[0]>[0]
+  search.subscribe(value => { state = value })
+  search.input('sessions'); search.submit()
+  search.summary('Session', '3 sessions')
+  search.target('Transcript')
+  assert.equal(state.draft, 'sessions')
+  assert.deepEqual(state.queries, { Session: 'sessions', Transcript: '' })
+  assert.deepEqual(state.requests, { Session: 1, Transcript: 0 })
+  search.input('reply'); search.submit(); search.submit()
+  search.summary('Transcript', '2 / 4')
+  assert.deepEqual(state.requests, { Session: 1, Transcript: 2 })
+  assert.deepEqual(state.queries, { Session: 'sessions', Transcript: 'reply' })
+  const applied = state.queries, requests = state.requests, summaries = state.summaries
+  for (const draft of ['edited', '', '   ']) {
+    search.input(draft)
+    assert.equal(state.queries, applied)
+    assert.equal(state.requests, requests)
+    assert.equal(state.summaries, summaries)
+  }
+  search.target('Session')
+  assert.equal(state.draft, '   ')
+  assert.equal(state.queries, applied)
+  assert.equal(state.requests, requests)
+  assert.deepEqual(state.summaries, { Session: '3 sessions', Transcript: '2 / 4' })
+  search.submit()
+  assert.deepEqual(state.queries, { Session: '', Transcript: 'reply' })
+  assert.deepEqual(state.requests, { Session: 2, Transcript: 2 })
+  search.target('Transcript'); search.submit()
+  assert.deepEqual(state.queries, { Session: '', Transcript: '' })
+  assert.deepEqual(state.requests, { Session: 2, Transcript: 3 })
+})
 
 const item = (id: number): SessionSummary => ({ entry_key: String(id), thread_id: String(id), path: `/${id}.jsonl`,
   title: `Session ${id}`, title_source: 'thread_id', created_at_ms: 100 - id, created_at_source: 'session_metadata',
@@ -25,6 +68,46 @@ function setup(overrides: Partial<NavigatorApi> = {}, preferences?: Pick<Storage
   navigator.subscribe(value => { state = value })
   return { navigator, get state() { return state } }
 }
+
+test('new Session searches and clearing reject stale pages while preserving mode, paging and reload query', async () => {
+  const slow = deferred<{ page: SessionPage; scanned: number; unreadable: number }>()
+  const requested: string[] = []
+  const summaries: string[] = []
+  const s = setup({ search: async (query, progress) => {
+    requested.push(query); progress({ scanned: 40, total: 40, unreadable: 0 })
+    if (query === 'slow') return slow.promise
+    return { page: { ...page(query ? [30] : [0], query || 'all'), total: query ? 1 : 40 }, scanned: 40, unreadable: 0 }
+  } })
+  await s.navigator.reload()
+  const pending = s.navigator.search('slow', text => summaries.push(text))
+  await s.navigator.search('latest', text => summaries.push(text))
+  assert.equal(s.state.page?.items[0].entry_key, '30')
+  slow.resolve({ page: page([3], 'slow'), scanned: 40, unreadable: 0 }); await pending
+  assert.equal(s.state.page?.snapshot_id, 'latest')
+  assert.deepEqual(summaries, ['1 sessions'])
+  await s.navigator.reload()
+  assert.equal(requested.at(-1), 'latest')
+  await s.navigator.search('', text => summaries.push(text))
+  assert.equal(s.state.page?.total, 40)
+  assert.equal(summaries.at(-1), '')
+})
+
+test('Reload supersedes a search progress Toast and initial search first obtains a source snapshot', async () => {
+  const status = createStatusController()
+  const slow = deferred<{ page: SessionPage; scanned: number; unreadable: number }>()
+  let initialized = false
+  const s = setup({ reload: async () => { initialized = true; return page() }, search: async () => {
+    assert.equal(initialized, true)
+    return slow.promise
+  } }, undefined, status)
+  const pending = s.navigator.search('first', () => {})
+  await Promise.resolve()
+  assert.equal(status.current().severity, 'progress')
+  const reload = s.navigator.reload()
+  slow.resolve({ page: page([2]), scanned: 40, unreadable: 0 })
+  await pending; await reload
+  assert.equal(status.current().message, 'Ready.')
+})
 
 test('view preference restores both modes and loads hierarchy on the fresh snapshot', async () => {
   const saved = new Map<string, string>()

@@ -2,6 +2,16 @@
 
 This directory contains the Svelte workspace and its Tauri desktop bridge. Rust owns JSONL decoding, session inspection and classification, Navigator snapshots, parent-session lookup, and Worklog generation. The desktop bridge calls the backend in-process.
 
+## Search
+
+The shared SEARCH row keeps one draft input across Session and Transcript, with a separate last-applied condition and result for each scope. Editing or clearing the draft, or switching scope, preserves applied results and highlights. Only Enter or the magnifying-glass button applies the draft to the selected scope. Searches use literal, case-insensitive substrings, with surrounding query whitespace ignored. Ctrl+F focuses and selects the draft without changing its scope or opening WebView2's Find UI.
+
+Session search scans every entry in the current complete Navigator snapshot, including entries beyond the first page. It reads plain and Zstandard-compressed sources through the existing source validation and parser, and matches only actual `You` entries. The discovery boundary remains `CODEX_HOME/sessions`; archives, Guardian reviews and linked sources retain their existing exclusions. Results retain Flat/Hierarchical ordering, paging and selection. Submitting an empty Session draft restores the unfiltered snapshot; Reload discovers current files and reapplies the last submitted query. Toasts report progress, completion and unreadable files. Generation checks reject superseded searches and reloads. Search does not write source logs or maintain a persistent index.
+
+Transcript search runs on the rendered message bodies that pass the active filters. Collapsed bodies are excluded until expanded. It searches rendered Markdown text, including matches spanning inline formatting, and preserves line and paragraph boundaries. CSS Highlights and DOM Ranges preserve message nodes, link handlers, clipboard text and Collection snapshots. Repeating the applied query advances and wraps; the row reports the current/total position. Filter, collapse, Refresh, theme and session changes rebuild results using the last submitted condition, independently of the draft. Submitting an empty Transcript draft removes its highlights and position. Search does not change filters or Collection.
+
+`lib/search/` owns scope/query state, literal matching and Transcript range navigation. Rust's `session/search.rs` owns parser-grounded Session matching; Navigator keeps the original snapshot separate from its search view. The Tauri `search_sessions` command transports result pages and a progress channel.
+
 ## Session Navigator and loading
 
 `lib/session-navigator/` implements Flat and Hierarchical views of one backend snapshot. The backend discovers ordinary and ChatGPT Handoff sessions under `CODEX_HOME/sessions`, defaulting to the user's `.codex/sessions`. It excludes archives, Guardian reviews, and linked sources. Title metadata and actual conversation activity are collected by the backend; missing-title sources become Untitled Session without invented prompt titles.

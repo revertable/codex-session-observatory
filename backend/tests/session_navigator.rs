@@ -182,6 +182,123 @@ fn flat_request(id: &str, cursor: Option<String>) -> FlatSessionsRequestDto {
 }
 
 #[test]
+fn search_uses_all_pages_only_parser_you_and_both_formats_then_restores_membership() {
+    let f = Fixture::new();
+    for i in 0..27 {
+        let text = log(&format!("search-{i:02}"), "user")
+            + &lines(vec![
+                json!({"type":"event_msg","payload":{"type":"agent_message","message":"Needle in assistant"}}),
+                json!({"type":"response_item","payload":{"type":"function_call_output","output":"Needle in tool output"}}),
+                json!({"type":"event_msg","payload":{"type":"user_message","message":"# AGENTS.md instructions for fixture\n\n<INSTRUCTIONS>\nNeedle in context\n</INSTRUCTIONS>"}}),
+                json!({"type":"event_msg","payload":{"type":"user_message","message":if i < 25 { "Find NEEDLE 한글 [x]." } else { "Other human request" }}}),
+            ]);
+        let name = format!(
+            "sessions/2026/10/01/{i}.jsonl{}",
+            if i % 2 == 0 { ".zst" } else { "" }
+        );
+        let bytes = if i % 2 == 0 {
+            zstd::stream::encode_all(text.as_bytes(), 3).unwrap()
+        } else {
+            text.into_bytes()
+        };
+        f.write(&name, &bytes);
+    }
+    let service = NavigatorService::default();
+    let original = service
+        .install(service.begin_reload(), collect_snapshot(&f.0).unwrap())
+        .unwrap();
+    assert_eq!(original.items.len(), 20);
+    let mut progress = Vec::new();
+    let result = service
+        .search(service.begin_reload(), "needle", |value| {
+            progress.push(value)
+        })
+        .unwrap();
+    assert_eq!(
+        (result.page.total, result.scanned, result.unreadable),
+        (25, 27, 0)
+    );
+    assert_eq!(progress.last().unwrap().scanned, 27);
+    let next = service
+        .flat(flat_request(
+            &result.page.snapshot_id,
+            result.page.next_cursor.clone(),
+        ))
+        .unwrap();
+    assert_eq!(next.items.len(), 5);
+    let tree = service
+        .hierarchy(HierarchicalSessionsRequestDto {
+            snapshot_id: result.page.snapshot_id.clone(),
+        })
+        .unwrap();
+    assert_eq!(tree.total, 25);
+    assert!(
+        service
+            .resolve_target(NavigatorTargetRequestDto {
+                snapshot_id: result.page.snapshot_id,
+                entry_key: result.page.items[0].entry_key.clone()
+            })
+            .is_ok()
+    );
+    let literal = service
+        .search(service.begin_reload(), "한글 [x].", |_| {})
+        .unwrap();
+    assert_eq!(literal.page.total, 25);
+    let empty = service
+        .search(service.begin_reload(), "no matches", |_| {})
+        .unwrap();
+    assert_eq!(empty.page.total, 0);
+    let restored = service
+        .search(service.begin_reload(), "  ", |_| {})
+        .unwrap();
+    assert_eq!(restored.page.total, 27);
+    assert_eq!(restored.page.items, original.items);
+}
+
+#[test]
+fn search_revalidates_sources_reports_partial_failures_and_rejects_superseded_work() {
+    let f = Fixture::new();
+    let removed = f.session("sessions/a.jsonl", "a", "user");
+    f.session("sessions/b.jsonl.zst", "b", "user");
+    let service = NavigatorService::default();
+    service
+        .install(service.begin_reload(), collect_snapshot(&f.0).unwrap())
+        .unwrap();
+    fs::remove_file(removed).unwrap();
+    let result = service
+        .search(service.begin_reload(), "human", |_| {})
+        .unwrap();
+    assert_eq!((result.page.total, result.unreadable), (1, 1));
+    assert!(
+        result
+            .page
+            .diagnostics
+            .warnings
+            .iter()
+            .any(|warning| warning == "search_files_unreadable")
+    );
+    let result = service.search(service.begin_reload(), "human", |_| {
+        service.begin_reload();
+    });
+    assert_eq!(
+        result.unwrap_err().error.code,
+        "navigator_search_superseded"
+    );
+    let cleared = service.search(service.begin_reload(), "", |_| {}).unwrap();
+    assert_eq!(cleared.page.total, 2);
+    let latest = collect_snapshot(&f.0).unwrap();
+    service.install(service.begin_reload(), latest).unwrap();
+    assert_eq!(
+        service
+            .search(service.begin_reload(), "", |_| {})
+            .unwrap()
+            .page
+            .total,
+        1
+    );
+}
+
+#[test]
 fn context_targets_revalidate_identity_formats_and_snapshot_without_changing_the_list() {
     let f = Fixture::new();
     let plain = f.session("sessions/2026/10/01/a.jsonl", "one", "user");

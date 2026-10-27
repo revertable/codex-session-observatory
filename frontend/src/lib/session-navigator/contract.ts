@@ -44,6 +44,10 @@ export interface NavigatorApi {
   reload(): Promise<SessionPage>
   flat(snapshot: string, cursor: string): Promise<SessionPage>
   hierarchy(snapshot: string): Promise<SessionHierarchy>
+  search?(query: string, progress: (value: SearchProgress) => void): Promise<SessionSearchResult>
 }
+
+export interface SearchProgress { scanned: number; total: number; unreadable: number }
+export interface SessionSearchResult { page: SessionPage; scanned: number; unreadable: number }
 
 export interface NavigatorTarget { snapshot_id: string; entry_key: string }

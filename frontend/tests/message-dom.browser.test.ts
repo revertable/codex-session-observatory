@@ -7,6 +7,26 @@ let harness: Awaited<ReturnType<typeof startClientHarness>>
 before(async () => { harness = await startClientHarness() }, { timeout: 60000 })
 after(async () => { await harness?.close() })
 
+test('Session and filtered Transcript search preserve navigation, semantic DOM and Ctrl+F', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/search-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    await app.send('Emulation.setDeviceMetricsOverride', { width: 1360, height: 760, deviceScaleFactor: 1, mobile: false })
+    await app.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await app.evaluate('globalThis.__searchStart()')
+    for (const width of [1100, 1360]) {
+      await app.send('Emulation.setDeviceMetricsOverride', { width, height: 760, deviceScaleFactor: 1, mobile: false })
+      await app.evaluate('globalThis.__searchWidthCase()')
+    }
+    await app.evaluate('globalThis.__sessionSearchCase()')
+    await app.evaluate('globalThis.__transcriptSearchCase()')
+    await app.evaluate('globalThis.__searchFocusSetup()')
+    await app.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 })
+    await app.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 })
+    await app.evaluate('globalThis.__searchFocusCheck()')
+    await app.evaluate('globalThis.__searchStop()')
+  } finally { await app.close() }
+})
+
 test('allocated Transcript width is shared across themes, content states and panel combinations', { timeout: 120000 }, async () => {
   const app = await startClientHarness({entry:fileURLToPath(new URL('./helpers/navigator-client.ts',import.meta.url)).replaceAll('\\','/')})
   try {
@@ -128,10 +148,14 @@ test('session context actions preserve the workspace and support pointer and key
 test('workspace panels resize independently and retain mounted state at minimum, default and wide sizes', { timeout: 60000 }, async () => {
   const workspace = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
   // This emulates WebView DPI; native frame/work-area fit is verified separately in Tauri.
-  const size = (width: number, height: number, scale = 1) => workspace.send('Emulation.setDeviceMetricsOverride', {
-    width, height, deviceScaleFactor: scale, mobile: false,
-    screenWidth: Math.round(1920 / scale), screenHeight: Math.round(1080 / scale),
-  })
+  const size = async (width: number, height: number, scale = 1) => {
+    await workspace.send('Emulation.setDeviceMetricsOverride', {
+      width, height, deviceScaleFactor: scale, mobile: false,
+      screenWidth: Math.round(1920 / scale), screenHeight: Math.round(1080 / scale),
+    })
+    // ResizeObserver applies the fitted tracks before pointer coordinates are measured.
+    await workspace.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  }
   const bounds = (name: string) => workspace.evaluate(`(() => { const e = document.querySelector('[aria-label="Resize ${name}"]'); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:Math.max(r.y+20,Math.min(r.bottom-20,innerHeight-40)),value:Number(e.getAttribute('aria-valuenow'))} })()`)
   const drag = async (name: string, delta: number) => {
     const point = await bounds(name)

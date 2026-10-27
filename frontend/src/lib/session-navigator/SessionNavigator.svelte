@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { useStatus } from '../control-room/status-context'
+  import { useSearch } from '../search/search-context'
   import { sessionNavigatorApi, resolveNavigatorSession, openNavigatorContainingFolder } from '../tauri-bridge'
   import { createNavigator, matchesSelection } from './state'
   import SessionEntry from './SessionEntry.svelte'
@@ -19,9 +20,23 @@
     onExport: (target: NavigatorTarget) => Promise<void>
   } = $props()
   const feedback = useStatus()!
+  const search = useSearch()
+  let searchRequest = 0
   const navigator = createNavigator(sessionNavigatorApi, feedback, {
     getItem: key => localStorage.getItem(key),
     setItem: (key, value) => localStorage.setItem(key, value),
+  })
+  $effect(() => {
+    const state = $search
+    if (!search || !state || state.requests.Session === searchRequest) return
+    searchRequest = state.requests.Session
+    void navigator.search(state.queries.Session, text => search.summary('Session', text))
+  })
+  $effect(() => {
+    const state = $search
+    if (search && state && $navigator.page && !$navigator.loading && !$navigator.error) {
+      search.summary('Session', state.queries.Session ? `${$navigator.page.total} sessions` : '')
+    }
   })
   let viewport: HTMLDivElement | undefined = $state()
   let now = $state(Date.now())

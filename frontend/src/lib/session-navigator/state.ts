@@ -50,6 +50,7 @@ export function createNavigator(api: NavigatorApi, feedback?: StatusController,
   let state: NavigatorState = { mode, page: null, hierarchy: null, loading: false,
     loadingMore: false, loadingHierarchy: false, error: null, failedAction: null }
   let generation = 0
+  let searchQuery = ''
   const listeners = new Set<(state: NavigatorState) => void>()
   let feedbackToken: StatusToken | undefined
   const publish = (patch: Partial<NavigatorState>) => {
@@ -87,9 +88,12 @@ export function createNavigator(api: NavigatorApi, feedback?: StatusController,
   }
   async function reload() {
     const token = ++generation
+    feedback?.clear('session-search')
     publish({ loading: true, loadingMore: false, loadingHierarchy: false, error: null, failedAction: null })
     try {
-      const page = await api.reload()
+      let page = await api.reload()
+      if (token !== generation) return
+      if (searchQuery && api.search) page = (await api.search(searchQuery, () => {})).page
       if (token !== generation) return
       publish({ page, hierarchy: null })
     } catch (error) { if (token === generation) fail(error, 'reload') }
@@ -122,6 +126,35 @@ export function createNavigator(api: NavigatorApi, feedback?: StatusController,
       listeners.add(listener); listener(state); return () => { listeners.delete(listener) }
     },
     reload, more,
+    async search(query: string, summary: (text: string) => void) {
+      searchQuery = query.trim()
+      const token = ++generation
+      const status = feedback?.begin('session-search', query.trim() ? 'Searching all sessions…' : 'Restoring all sessions…')
+      publish({ loading: true, loadingMore: false, loadingHierarchy: false, error: null, failedAction: null })
+      try {
+        if (!api.search) throw new Error('Session search is unavailable.')
+        if (!state.page) {
+          await api.reload()
+          if (token !== generation) return
+        }
+        const result = await api.search(searchQuery, value => {
+          if (token === generation) feedback?.finish(status, 'progress', 'Searching sessions: ' + value.scanned + ' / ' + value.total + '…')
+        })
+        if (token !== generation) return
+        publish({ page: result.page, hierarchy: null })
+        summary(searchQuery ? result.page.total + ' sessions' : '')
+        feedback?.finish(status, result.unreadable ? 'warning' : 'success',
+          result.unreadable ? 'Search complete: ' + result.page.total + ' sessions matched; ' + result.unreadable + ' files could not be read.'
+            : searchQuery ? result.page.total + ' sessions matched.' : 'All sessions restored.')
+      } catch (error) {
+        if (token === generation) { fail(error, 'reload'); feedback?.finish(status, 'error', asError(error).message); summary('Search failed') }
+      } finally {
+        if (token === generation) {
+          publish({ loading: false })
+          if (state.mode === 'Hierarchical' && !state.error) await hierarchy()
+        }
+      }
+    },
     async toggle() {
       publish({ mode: state.mode === 'Flat' ? 'Hierarchical' : 'Flat' })
       const token = feedback?.begin('navigator-mode')

@@ -21,6 +21,9 @@
   } from './lib/tauri-bridge'
   import { createStatusController } from './lib/control-room/status-line'
   import { provideStatus } from './lib/control-room/status-context'
+  import { createSearchState } from './lib/search/search-state'
+  import { provideSearch } from './lib/search/search-context'
+  import TranscriptSearch from './lib/search/TranscriptSearch.svelte'
   import SessionHeader from './lib/control-room/SessionHeader.svelte'
   import SpecializedSessionPanel from './lib/control-room/SpecializedSessionPanel.svelte'
   import TranscriptActions from './lib/control-room/TranscriptActions.svelte'
@@ -49,6 +52,8 @@
   let workflow: LoadWorkflowState = createInitialLoadWorkflowState()
   const feedback = createStatusController()
   provideStatus(feedback)
+  const search = createSearchState()
+  provideSearch(search)
   let isExportingWorklog = false
   let isLocatingParentSession = false
   let selectedTheme: TranscriptThemeName = 'Terminal Style'
@@ -448,4 +453,5 @@
       onClear={() => { collection = clearCollection(collection) }} />
   {/snippet}
   </AppLayout>
+  <TranscriptSearch viewport={transcriptViewport} session={workflow.loaded_file.metadata?.absolute_path ?? ''} />
 </main>

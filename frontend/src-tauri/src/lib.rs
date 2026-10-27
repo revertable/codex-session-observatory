@@ -74,6 +74,23 @@ async fn list_sessions_flat(
 }
 
 #[tauri::command]
+async fn search_sessions(
+    state: tauri::State<'_, NavigatorState>,
+    query: String,
+    progress: tauri::ipc::Channel<backend::session::search::SearchProgress>,
+) -> api::ApiResult<backend::session::search::SearchResult> {
+    let service = Arc::clone(&state.inner().0);
+    let generation = service.begin_reload();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.search(generation, &query, |value| {
+            let _ = progress.send(value);
+        })
+    })
+    .await
+    .map_err(navigator_task_error)?
+}
+
+#[tauri::command]
 async fn list_sessions_hierarchy(
     state: tauri::State<'_, NavigatorState>,
     request: HierarchicalSessionsRequestDto,
@@ -317,6 +334,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             list_system_fonts,
+            search_sessions,
             reload_session_navigator,
             list_sessions_flat,
             list_sessions_hierarchy,

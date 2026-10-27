@@ -1,11 +1,11 @@
 import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, Channel } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { SystemFont } from './control-room/font-preferences'
 import type { ApiErrorDto, ErrorResponseDto, FilterDto, ParseResponseDto } from './parse-contract'
 import type { LocateParentSessionResponse } from './parent-session-contract'
 import type { ExportWorklogResponse } from './worklog-contract'
-import type { NavigatorApi, SessionPage, SessionHierarchy, NavigatorTarget } from './session-navigator/contract'
+import type { NavigatorApi, SessionPage, SessionHierarchy, NavigatorTarget, SearchProgress, SessionSearchResult } from './session-navigator/contract'
 
 async function navigatorInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try { return await invoke<T>(command, args) }
@@ -16,6 +16,11 @@ export const sessionNavigatorApi: NavigatorApi = {
   reload: () => navigatorInvoke<SessionPage>('reload_session_navigator'),
   flat: (snapshot_id, cursor) => navigatorInvoke<SessionPage>('list_sessions_flat', { request: { snapshot_id, cursor } }),
   hierarchy: (snapshot_id) => navigatorInvoke<SessionHierarchy>('list_sessions_hierarchy', { request: { snapshot_id } }),
+  search: (query, onProgress) => {
+    const progress = new Channel<SearchProgress>()
+    progress.onmessage = onProgress
+    return navigatorInvoke<SessionSearchResult>('search_sessions', { query, progress })
+  },
 }
 
 export const resolveNavigatorSession = (request: NavigatorTarget) => navigatorInvoke<string>('resolve_navigator_session', { request })

@@ -1,5 +1,5 @@
-//! Immutable, file-backed Navigator snapshots. Reload is separate from loading
-//! or refreshing a transcript; only the current snapshot is retained.
+//! Immutable, file-backed Navigator inventory and current search view. Reload
+//! replaces the inventory independently of transcript loading or refreshing.
 mod metadata;
 
 use super::source;
@@ -319,6 +319,7 @@ pub struct NavigatorService {
     instance: u128,
     generation: AtomicU64,
     current: Mutex<Option<(String, Arc<NavigatorSnapshot>)>>,
+    base: Mutex<Option<Arc<NavigatorSnapshot>>>,
 }
 impl Default for NavigatorService {
     fn default() -> Self {
@@ -329,6 +330,7 @@ impl Default for NavigatorService {
                 .as_nanos(),
             generation: AtomicU64::new(0),
             current: Mutex::new(None),
+            base: Mutex::new(None),
         }
     }
 }
@@ -344,6 +346,14 @@ impl NavigatorService {
         &self,
         generation: u64,
         snapshot: NavigatorSnapshot,
+    ) -> ApiResult<SessionPageDto> {
+        self.publish(generation, snapshot, true)
+    }
+    fn publish(
+        &self,
+        generation: u64,
+        snapshot: NavigatorSnapshot,
+        update_base: bool,
     ) -> ApiResult<SessionPageDto> {
         let mut state = self
             .current
@@ -367,9 +377,46 @@ impl NavigatorService {
             ));
         }
         let snapshot = Arc::new(snapshot);
+        if update_base {
+            *self
+                .base
+                .lock()
+                .map_err(|_| error("navigator_unavailable", "Navigator state is unavailable."))? =
+                Some(Arc::clone(&snapshot));
+        }
         let page = page(&id, &snapshot, 0);
         *state = Some((id, snapshot));
         Ok(page)
+    }
+    pub fn search(
+        &self,
+        generation: u64,
+        query: &str,
+        progress: impl FnMut(super::search::SearchProgress),
+    ) -> ApiResult<super::search::SearchResult> {
+        let base = self
+            .base
+            .lock()
+            .map_err(|_| error("navigator_unavailable", "Navigator state is unavailable."))?
+            .clone()
+            .ok_or_else(|| {
+                error(
+                    "navigator_snapshot_expired",
+                    "Reload Sessions before searching.",
+                )
+            })?;
+        let (snapshot, scanned, unreadable) = super::search::search_snapshot(
+            &base,
+            query,
+            || self.generation.load(Ordering::SeqCst) == generation,
+            progress,
+        )?;
+        let page = self.publish(generation, snapshot, false)?;
+        Ok(super::search::SearchResult {
+            page,
+            scanned,
+            unreadable,
+        })
     }
     fn snapshot(&self, id: &str) -> ApiResult<Arc<NavigatorSnapshot>> {
         let state = self
@@ -407,69 +454,7 @@ impl NavigatorService {
     /// Resolve only a published entry, then inspect the current read-only source again.
     pub fn resolve_target(&self, request: NavigatorTargetRequestDto) -> ApiResult<PathBuf> {
         let snapshot = self.snapshot(&request.snapshot_id)?;
-        let item = snapshot
-            .items
-            .iter()
-            .find(|item| item.entry_key == request.entry_key)
-            .ok_or_else(|| {
-                error(
-                    "navigator_entry_missing",
-                    "The session is not in this snapshot. Reload Sessions.",
-                )
-            })?;
-        let root = Path::new(&snapshot.sessions_root);
-        let candidate = source::resolve_path(Path::new(&item.path)).map_err(|_| {
-            error(
-                "navigator_source_unavailable",
-                "The session file is unavailable. Reload Sessions.",
-            )
-        })?;
-        // Reject replaced directories as well as links at the leaf itself.
-        let mut ancestor = Some(candidate.as_path());
-        while let Some(path) = ancestor {
-            if !path.starts_with(root) || is_link(path) {
-                return Err(error(
-                    "navigator_source_changed",
-                    "The session path has changed. Reload Sessions.",
-                ));
-            }
-            if path == root {
-                break;
-            }
-            ancestor = path.parent();
-        }
-        let path = fs::canonicalize(&candidate).map_err(|_| {
-            error(
-                "navigator_source_unavailable",
-                "The session file is unavailable. Reload Sessions.",
-            )
-        })?;
-        if !path.starts_with(root) {
-            return Err(error(
-                "navigator_source_changed",
-                "The session path has changed. Reload Sessions.",
-            ));
-        }
-        let inspection = source::open_reader(&path)
-            .and_then(inspect_reader)
-            .map_err(|_| {
-                error(
-                    "navigator_source_unavailable",
-                    "The session file could not be inspected.",
-                )
-            })?;
-        let id = inspection
-            .identity
-            .as_ref()
-            .and_then(|identity| identity.thread_id.as_ref());
-        if id != item.thread_id.as_ref()
-            || inspection.classification == SessionClassification::GuardianReview
-        {
-            return Err(error(
-                "navigator_source_changed",
-                "The session identity has changed. Reload Sessions.",
-            ));
-        }
+        let path = resolve_snapshot_target(&snapshot, &request.entry_key)?;
         // A concurrent Reload must not authorize an action on an expired entry.
         self.snapshot(&request.snapshot_id)?;
         Ok(path)
@@ -531,6 +516,81 @@ impl NavigatorService {
             diagnostics: snapshot.diagnostics.clone(),
         })
     }
+}
+pub(super) fn resolve_snapshot_target(
+    snapshot: &NavigatorSnapshot,
+    key: &str,
+) -> ApiResult<PathBuf> {
+    let item = snapshot
+        .items
+        .iter()
+        .find(|item| item.entry_key == key)
+        .ok_or_else(|| {
+            error(
+                "navigator_entry_missing",
+                "The session is not in this snapshot. Reload Sessions.",
+            )
+        })?;
+    resolve_snapshot_item(snapshot, item)
+}
+pub(super) fn resolve_snapshot_item(
+    snapshot: &NavigatorSnapshot,
+    item: &SessionSummaryDto,
+) -> ApiResult<PathBuf> {
+    let root = Path::new(&snapshot.sessions_root);
+    let candidate = source::resolve_path(Path::new(&item.path)).map_err(|_| {
+        error(
+            "navigator_source_unavailable",
+            "The session file is unavailable. Reload Sessions.",
+        )
+    })?;
+    // Reject replaced directories as well as links at the leaf itself.
+    let mut ancestor = Some(candidate.as_path());
+    while let Some(path) = ancestor {
+        if !path.starts_with(root) || is_link(path) {
+            return Err(error(
+                "navigator_source_changed",
+                "The session path has changed. Reload Sessions.",
+            ));
+        }
+        if path == root {
+            break;
+        }
+        ancestor = path.parent();
+    }
+    let path = fs::canonicalize(&candidate).map_err(|_| {
+        error(
+            "navigator_source_unavailable",
+            "The session file is unavailable. Reload Sessions.",
+        )
+    })?;
+    if !path.starts_with(root) {
+        return Err(error(
+            "navigator_source_changed",
+            "The session path has changed. Reload Sessions.",
+        ));
+    }
+    let inspection = source::open_reader(&path)
+        .and_then(inspect_reader)
+        .map_err(|_| {
+            error(
+                "navigator_source_unavailable",
+                "The session file could not be inspected.",
+            )
+        })?;
+    let id = inspection
+        .identity
+        .as_ref()
+        .and_then(|identity| identity.thread_id.as_ref());
+    if id != item.thread_id.as_ref()
+        || inspection.classification == SessionClassification::GuardianReview
+    {
+        return Err(error(
+            "navigator_source_changed",
+            "The session identity has changed. Reload Sessions.",
+        ));
+    }
+    Ok(path)
 }
 fn page(id: &str, snapshot: &NavigatorSnapshot, offset: usize) -> SessionPageDto {
     let end = (offset + PAGE_SIZE).min(snapshot.items.len());
