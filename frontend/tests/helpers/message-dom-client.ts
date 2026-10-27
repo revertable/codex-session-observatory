@@ -7,6 +7,7 @@ import Host from '../fixtures/MessageContentHost.svelte';
 import { buildMessageDom, mountMessageDom } from '../../src/lib/rendering/message-dom.ts';
 import { parseMessageMarkdown } from '../../src/lib/rendering/message-semantics.ts';
 import { serializeTranscript } from '../../src/lib/rendering/transcript-capture.ts';
+import UpdateNotice from '../../src/lib/rendering/UpdateNotice.svelte';
 import { identifyMessages } from '../../src/lib/collection/collection-state.ts';
 import '../../src/app.css';
 import '../../src/lib/rendering/transcript.css';
@@ -148,6 +149,21 @@ const cases: Record<string, () => Promise<void>> = {
         }
     },
     async 'empty theme guidance preserves text and gives every role and release state readable contrast'() {
+        for (const [status, latestVersion, expected] of [
+            ['current', '2.1.0', '[OK] Latest public version: v2.1.0'],
+            ['current', '2.0.1', '[OK] Latest public version: v2.0.1'],
+            ['development', '2.0.1', '[DEV] Unpublished development version: v2.1.0 (latest public: v2.0.1).'],
+            ['update-available', '2.1.1', '[UPDATE]New version available: v2.1.1. [View GitHub Releases]'],
+        ] as const) {
+            const instance = mount(UpdateNotice, { target, props: { presentation: 'terminal', releaseStatus: {
+                status, currentVersion: status === 'current' ? latestVersion : '2.1.0', latestVersion,
+            } } });
+            try {
+                await settle();
+                const actual = target.querySelector('.update-notice')!.textContent!.trim().replace(/\s+/g, ' ');
+                assert(actual === expected, 'terminal release wording and punctuation: ' + JSON.stringify({ status, actual, expected }));
+            } finally { await unmount(instance); target.replaceChildren(); }
+        }
         for (const [theme, component] of themes.slice(1)) {
             target.dataset.theme = theme;
             for (const status of ['current', 'development', 'update-available']) {

@@ -21,7 +21,7 @@
     <a href={RELEASES_PAGE_URL} onclick={visitReleases}>[View GitHub Releases]</a>
   {:else if releaseStatus.status === 'current'}
     {#if presentation === 'terminal'}
-      [OK] Latest public version: v{releaseStatus.latestVersion}.
+      [OK] Latest public version: v{releaseStatus.latestVersion}
     {:else if presentation === 'markdown'}
       Latest public version — you’re running v{releaseStatus.latestVersion}.
     {:else}

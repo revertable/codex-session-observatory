@@ -37,6 +37,18 @@ test('reports an exact stable match as the current public release', async () => 
   )
 })
 
+test('2.1.0 remains development until the matching public release is published', async () => {
+  assert.deepEqual(await checkPublicReleaseStatus('2.1.0', releaseResponse('v2.0.1')), {
+    status: 'development', currentVersion: '2.1.0', latestVersion: '2.0.1',
+  })
+  assert.deepEqual(await checkPublicReleaseStatus('2.1.0', releaseResponse('v2.1.0')), {
+    status: 'current', currentVersion: '2.1.0', latestVersion: '2.1.0',
+  })
+  assert.deepEqual(await checkPublicReleaseStatus('2.1.0', releaseResponse('v2.1.1')), {
+    status: 'update-available', currentVersion: '2.1.0', latestVersion: '2.1.1',
+  })
+})
+
 test('reports a stable running version newer than the public release as development', async () => {
   assert.deepEqual(
     await checkPublicReleaseStatus('1.2.0', releaseResponse('v1.1.3')),
