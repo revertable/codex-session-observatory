@@ -93,6 +93,8 @@ test('Toast palettes, icons and compact layout cover all four themes and five op
   const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
   try {
     await app.send('Emulation.setDeviceMetricsOverride', { width: 1360, height: 760, deviceScaleFactor: 1, mobile: false })
+    // Test both motion modes explicitly instead of inheriting the runner's OS preference.
+    await app.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
     await app.evaluate('globalThis.__widthStart()')
     await app.evaluate('globalThis.__widthLoad(false)')
     await app.evaluate('globalThis.__widthCheck("Terminal Style",true,true)')
@@ -103,7 +105,7 @@ test('Toast palettes, icons and compact layout cover all four themes and five op
           assert.equal(await app.evaluate(`getComputedStyle(document.querySelector('.toast-spinner')).animationName`), 'toast-spin')
           await app.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
           assert.equal(await app.evaluate(`getComputedStyle(document.querySelector('.toast-spinner')).animationName`), 'none')
-          await app.send('Emulation.setEmulatedMedia', { features: [] })
+          await app.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
         }
       }
     }
