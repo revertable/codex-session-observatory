@@ -269,11 +269,11 @@ const cases: Record<string, () => Promise<void>> = {
             anchor.click();
             await settle();
             failOpen = false;
-            assert(target.querySelector('.status-line-text')?.textContent === 'Could not open this link.', 'error displayed');
+            assert(target.querySelector('.toast-message')?.textContent === 'Could not open this link.', 'error displayed');
             assert(host.querySelector('strong') === leaf, 'link error does not rebuild');
             anchor.click();
             await settle();
-            assert(!target.querySelector('.status-line-text')?.textContent?.includes('Could not open this link.'), 'success clears error');
+            assert(!target.querySelector('.toast-message')?.textContent?.includes('Could not open this link.'), 'success clears error');
             assert(host.querySelector('strong') === leaf, 'link success does not rebuild');
             observer.disconnect();
             instance.replace({ block: block('*two*\n\n' + tableSource) });

@@ -2,6 +2,27 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createStatusController } from '../src/lib/control-room/status-line.ts'
 
+test('dismissed results reveal pending progress without accepting stale or active dismissals', () => {
+  const s = createStatusController()
+  const pending = s.begin('sessions', 'Loading sessions…')
+  const failure = s.begin('capture')
+  s.finish(failure, 'error', 'Capture failed.')
+  const old = s.current()
+  s.finish(failure, 'error', 'New failure.')
+  assert.equal(s.dismiss(old), false)
+  assert.equal(s.current().message, 'New failure.')
+  assert.equal(s.dismiss(s.current()), true)
+  assert.equal(s.current().message, 'Loading sessions…')
+  assert.equal(s.dismiss(s.current()), false)
+  s.finish(pending)
+  s.finish(s.begin('copy'), 'success', 'Copied.')
+  assert.equal(s.current().message, 'Copied.')
+  assert.equal(s.dismiss(s.current()), true)
+  assert.equal(s.current().message, 'Ready.')
+  s.dispose()
+  assert.equal(s.dismiss(old), false)
+})
+
 test('independent successes and progress never erase another operation failure or warning', () => {
   const s = createStatusController()
   s.finish(s.begin('export'), 'warning', 'Folder could not be opened.')

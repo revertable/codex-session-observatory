@@ -39,12 +39,55 @@ test('allocated Transcript width is shared across themes, content states and pan
   } finally { await app.close() }
 })
 
-test('compact header and shared status preserve feedback, recovery and workspace height', { timeout: 60000 }, async () => {
+test('compact search header and toast preserve feedback, recovery and workspace height', { timeout: 60000 }, async () => {
   const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\','/') })
   try {
     await app.send('Emulation.setDeviceMetricsOverride',{width:1360,height:760,deviceScaleFactor:1,mobile:false})
     await app.send('Emulation.setFocusEmulationEnabled',{enabled:true})
     await app.evaluate('globalThis.__feedbackCase()')
+  } finally { await app.close() }
+})
+
+test('Search Enter and icon share the execution hook; Toast lifetimes preserve reading and lifecycle', { timeout: 90000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/search-toast-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    await app.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    for (const scope of ['Session', 'Transcript']) {
+      await app.evaluate(`globalThis.__setSearch(${JSON.stringify(scope)})`)
+      await app.send('Input.insertText', { text: 'hello 한글 <>&' })
+      await app.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' })
+      await app.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+      await app.evaluate(`document.querySelector('[aria-label="Search"]').click()`)
+      const calls = await app.evaluate('globalThis.__searchCalls()')
+      const expected = { target: scope, query: scope === 'Session' ? 'hello 한글 <>&' : 'hello 한글 <>&hello 한글 <>&' }
+      assert.deepEqual(calls.slice(-2), [expected, expected])
+      assert.equal(calls.length, scope === 'Session' ? 2 : 4)
+    }
+    for (const stage of ['progress', 'reading', 'terminal', 'lifecycle']) {
+      await app.evaluate(`globalThis.__toastCase(${JSON.stringify(stage)})`)
+    }
+  } finally { await app.close() }
+})
+
+test('Toast palettes, icons and compact layout cover all four themes and five operation states', { timeout: 60000 }, async () => {
+  const app = await startClientHarness({ entry: fileURLToPath(new URL('./helpers/navigator-client.ts', import.meta.url)).replaceAll('\\', '/') })
+  try {
+    await app.send('Emulation.setDeviceMetricsOverride', { width: 1360, height: 760, deviceScaleFactor: 1, mobile: false })
+    await app.evaluate('globalThis.__widthStart()')
+    await app.evaluate('globalThis.__widthLoad(false)')
+    await app.evaluate('globalThis.__widthCheck("Terminal Style",true,true)')
+    for (const theme of ['Terminal Style', 'Markdown Style', 'DM Style', 'DM Style (Dark)']) {
+      for (const severity of ['success', 'info', 'progress', 'warning', 'error']) {
+        await app.evaluate(`globalThis.__toastDesignShow(${JSON.stringify(theme)},${JSON.stringify(severity)})`)
+        if (severity === 'progress') {
+          assert.equal(await app.evaluate(`getComputedStyle(document.querySelector('.toast-spinner')).animationName`), 'toast-spin')
+          await app.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+          assert.equal(await app.evaluate(`getComputedStyle(document.querySelector('.toast-spinner')).animationName`), 'none')
+          await app.send('Emulation.setEmulatedMedia', { features: [] })
+        }
+      }
+    }
+    await app.evaluate('globalThis.__widthStop()')
   } finally { await app.close() }
 })
 

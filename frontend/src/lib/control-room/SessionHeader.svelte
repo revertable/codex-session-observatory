@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusLine from './StatusLine.svelte'
+  import SearchRow from './SearchRow.svelte'
   import FontSelectors from './FontSelectors.svelte'
   import { useStatus } from './status-context'
   import type { LoadStatus } from '../load-workflow'
@@ -218,5 +219,7 @@
     </div>
   </section>
 
-  <StatusLine {feedback} />
+  <SearchRow />
 </header>
+
+<StatusLine {feedback} theme={selectedTheme} />

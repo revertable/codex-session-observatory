@@ -31,6 +31,15 @@ export function createStatusController() {
       publish(); return true
     },
     clear(scope: string) { entries.delete(scope); publish() },
+    dismiss(value: Feedback) {
+      // A dismissed result must not mask later operations or remove active progress.
+      if (!alive || value.severity === 'progress') return false
+      for (const [scope, entry] of entries) {
+        if (entry.feedback !== value) continue
+        entries.delete(scope); publish(); return true
+      }
+      return false
+    },
     invalidateSession() {
       for (const [key, entry] of entries) if (entry.token.sessionBound) entries.delete(key)
       publish()

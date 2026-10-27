@@ -107,6 +107,7 @@ let cancelExport = false; let failAction = ''; let failExport = false; let failF
     if (command === 'resolve_jsonl_initial_directory') return '/sessions'
     if (command === 'export_worklog') {
       if (failExport) throw { error: { code: 'target_not_safe_to_overwrite', message: 'Synthetic unsafe target' } }
+      if (holdExport) await new Promise<void>(resolve => { releaseExport = resolve })
       return { status: 'exported', bundle_path: '/output/codex-worklog/bundle', generated_files: ['index.md'], refreshed: false, folder_opened: !failFolderAfterExport, folder_open_error: failFolderAfterExport ? 'Synthetic folder failure' : null }
     }
     if (['resolve_navigator_session', 'open_navigator_containing_folder', 'export_navigator_worklog'].includes(command)) {
@@ -158,13 +159,13 @@ function verifyNavigatorHeader() {
 }
 
 function verifyHeaderAlignment() {
-  const content = ['.selected-path-row strong', '.selection-metadata dd', '.appearance-controls', '.filter-group[data-filter-layer="core"]', '.status-line-text']
+  const content = ['.selected-path-row strong', '.selection-metadata dd', '.appearance-controls', '.filter-group[data-filter-layer="core"]', '.search-controls']
     .map(q => target.querySelector(q)!.getBoundingClientRect().left)
-  assert(Math.max(...content) - Math.min(...content) < 0.02, 'metadata, Resume, Filters and Status share the content start')
-  const labels = ['.selected-path-row > span', '.selection-metadata dt', '.style-label', '.filter-bar h2', '.status-line-label']
+  assert(Math.max(...content) - Math.min(...content) < 0.02, 'metadata, Resume, Filters and Search share the content start')
+  const labels = ['.selected-path-row > span', '.selection-metadata dt', '.style-label', '.filter-bar h2', '.search-row-label']
     .map(q => target.querySelector(q)!.getBoundingClientRect().left)
   assert(Math.max(...labels) - Math.min(...labels) < 0.02, 'upper row labels share the title start')
-  const rows = ['.filter-bar', '.status-line'].map(q => target.querySelector(q)!.getBoundingClientRect())
+  const rows = ['.filter-bar', '.search-row'].map(q => target.querySelector(q)!.getBoundingClientRect())
   assert(rows.every(r => Math.abs(r.height - 44) < 0.02), 'both control rows have the same compact height')
   const session = target.querySelector('.selection-metadata')!.getBoundingClientRect()
   const resume = target.querySelector('.resume-row')!.getBoundingClientRect()
@@ -178,7 +179,7 @@ function verifyHeaderAlignment() {
     assert(style.fontSize === '9px' && style.fontWeight === '600', 'appearance sublabels are smaller and lighter than Style')
   }
   const selects = [...target.querySelectorAll<HTMLSelectElement>('.appearance-row select')]
-  assert(selects.length === 3 && target.querySelectorAll('.app-header select').length === 3, 'exactly three selectors in one row')
+  assert(selects.length === 3 && target.querySelectorAll('.search-row select').length === 1, 'three appearance selectors and one search target')
   const selectRects = selects.map(e => e.getBoundingClientRect())
   assert(selectRects.every(r => Math.abs(r.top - selectRects[0].top) < 0.02 && r.height === 28), 'selectors share height and alignment')
   for (const select of selects) {
@@ -448,7 +449,7 @@ let workspaceList: Element | null
         assert(!target.textContent?.includes('Session folder opened.'), 'folder success is silent')
         assert(folderTargets.at(-1) === items[index].path && !menu(), 'folder uses right-clicked plain/compressed session')
         await openMenu(index); await choose('Export Worklog'); preserved()
-        assert(exportedTargets.at(-1) === items[index].path && target.querySelector('.status-line-text')?.textContent?.startsWith('Worklog exported successfully:'), 'export uses unselected session and shared success feedback')
+        assert(exportedTargets.at(-1) === items[index].path && target.querySelector('.toast-message')?.textContent?.startsWith('Worklog exported successfully:'), 'export uses unselected session and shared success feedback')
       }
       await openMenu(1)
       menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle()
@@ -474,18 +475,18 @@ let workspaceList: Element | null
     await openMenu(1); await click(reloadButton()); assert(!menu(), 'Reload dismisses old menu')
     const count = exportedTargets.length
     cancelExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(exportedTargets.length === count && target.querySelector('.status-line-text')?.textContent === 'Worklog export cancelled.', 'cancel does not export and reports no success')
+    assert(exportedTargets.length === count && target.querySelector('.toast-message')?.textContent === 'Worklog export cancelled.', 'cancel does not export and reports no success')
     cancelExport = false
     failExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(target.querySelector('.status-line')?.textContent?.includes('Target not safe to overwrite.'), 'export failure after directory selection is visible')
+    assert(target.querySelector('.toast-message')?.textContent?.includes('Target not safe to overwrite.'), 'export failure after directory selection is visible')
     failExport = false
     failFolderAfterExport = true; await openMenu(1); await choose('Export Worklog'); preserved()
-    assert(target.querySelector('.status-line')?.textContent?.includes('folder could not be opened'), 'folder failure after export remains visible')
+    assert(target.querySelector('.toast-message')?.textContent?.includes('folder could not be opened'), 'folder failure after export remains visible')
     failFolderAfterExport = false
     failAction = 'navigator_snapshot_expired'; await openMenu(1); await choose('Open Containing Folder'); preserved()
-    assert(target.querySelector('.status-line')?.textContent?.includes('Reload Sessions'), 'expiry gives reload recovery')
+    assert(target.querySelector('.toast-message')?.textContent?.includes('Reload Sessions'), 'expiry gives reload recovery')
     failAction = 'navigator_source_changed'; await openMenu(1); await choose('Open'); preserved()
-    assert(target.querySelector('.status-line')?.textContent?.includes('Synthetic action failure'), 'changed identity does not load')
+    assert(target.querySelector('.toast-message')?.textContent?.includes('Synthetic action failure'), 'changed identity does not load')
     failAction = ''; holdExport = true; await openMenu(1); await choose('Export Worklog')
     assert(reloadButton().disabled && row(2)!.disabled, 'pending export blocks conflicting navigator actions')
     assert(!/Preparing Worklog export|Opening…|Exporting worklog/.test(target.textContent ?? ''), 'context progress is silent throughout the app')
@@ -515,12 +516,12 @@ let workspaceList: Element | null
       menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle()
     }
     cancelExport = true; await click(button('Export Worklog'))
-    assert(target.querySelector('.status-line-text')?.textContent === 'Worklog export cancelled.', 'existing top Export keeps cancellation status')
+    assert(target.querySelector('.toast-message')?.textContent === 'Worklog export cancelled.', 'existing top Export keeps cancellation status')
     cancelExport = false; await click(button('Export Worklog'))
-    const topStatus = target.querySelector('.status-line-text')!.textContent
+    const topStatus = target.querySelector('.toast-message')!.textContent
     assert(topStatus?.includes('Worklog exported successfully:'), 'existing top Export keeps success status')
     await openMenu(2); await choose('Export Worklog')
-    assert(target.querySelector('.status-line-text')!.textContent === topStatus, 'context and toolbar Export share the common success feedback')
+    assert(target.querySelector('.toast-message')!.textContent === topStatus, 'context and toolbar Export share the common success feedback')
   } finally { await unmount(instance) }
   assert(!menu(), 'portal menu removed on unmount')
 }
@@ -741,14 +742,14 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
           const typography = getComputedStyle(heading)
           assert(typography.fontSize === '14px' && typography.fontWeight === '650', 'panel titles share typography')
         }
-        for (const label of target.querySelectorAll('.selected-path-row > span, .selection-metadata dt, .resume-row > span:first-child, .filter-bar > h2, .style-label, .status-line-label')) {
+        for (const label of target.querySelectorAll('.selected-path-row > span, .selection-metadata dt, .resume-row > span:first-child, .filter-bar > h2, .style-label, .search-row-label')) {
           const typography = getComputedStyle(label)
           assert(typography.fontSize === '11px' && typography.fontWeight === '650', 'header labels share typography')
         }
         const filters = target.querySelector('.filter-list')!.getBoundingClientRect()
-        const statusContent = target.querySelector('.status-announcement')!.getBoundingClientRect()
-        assert(Math.abs(filters.left - statusContent.left) < 1, 'Filters and Status content start aligned')
-        assert(target.querySelector('.filter-bar')!.getBoundingClientRect().height === target.querySelector('.status-line')!.getBoundingClientRect().height, 'Filters and Status row heights retained')
+        const statusContent = target.querySelector('.search-controls')!.getBoundingClientRect()
+        assert(Math.abs(filters.left - statusContent.left) < 1, 'Filters and Search content start aligned')
+        assert(target.querySelector('.filter-bar')!.getBoundingClientRect().height === target.querySelector('.search-row')!.getBoundingClientRect().height, 'Filters and Search row heights retained')
         assert(style.backgroundColor === getComputedStyle(renderer).backgroundColor && style.backgroundColor === getComputedStyle(viewport, '::-webkit-scrollbar-track').backgroundColor, 'renderer, gutter and scrollbar track share a surface')
         assert(style.borderWidth === '0px' && style.padding === '0px' && style.boxSizing === 'border-box', 'viewport geometry belongs to the common structure')
         assert(getComputedStyle(renderer).overflow === 'visible' && getComputedStyle(content).minHeight === '100%', 'only viewport owns vertical scrolling')
@@ -772,14 +773,14 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
   const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
   let failCopy = false
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { if (failCopy) throw new Error('Clipboard denied') } } })
-  const message = () => target.querySelector('.status-line-text')!.textContent!
-  const severity = () => target.querySelector('.status-line')!.getAttribute('data-severity')
-  const statusBackground = () => getComputedStyle(target.querySelector('.status-line-text')!).backgroundColor
+  const message = () => target.querySelector('.toast-message')?.textContent ?? ''
+  const severity = () => target.querySelector('.status-toast')!.getAttribute('data-severity')
+  const statusAccent = () => getComputedStyle(target.querySelector('.toast-icon')!).color
   const checkHeaderRows = () => {
     verifyHeaderAlignment()
-    assert(getComputedStyle(target.querySelector('.status-line')!).backgroundColor === 'rgb(255, 255, 255)', 'status row stays neutral outside the badge')
+    assert(getComputedStyle(target.querySelector('.search-row')!).backgroundColor === 'rgb(255, 255, 255)', 'status row stays neutral outside the badge')
   }
-  const bounds = () => ['.app-header','.observatory-workspace','.status-line'].map(q => {
+  const bounds = () => ['.app-header','.observatory-workspace','.search-row'].map(q => {
     const r = target.querySelector(q)!.getBoundingClientRect(); return [r.y,r.height]
   })
   try {
@@ -790,13 +791,23 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     assert(Math.abs((262 - header.height) - (work.height - 454)) < 1, 'workspace gains exactly the height removed from the upper area')
     assert(!target.querySelector('.selected-path-field,.resume-actions') && !target.textContent?.includes('Select JSONL'), 'direct selection UI removed')
     assert([...target.querySelectorAll('.selection-metadata dt')].map(e => e.textContent).join() === 'Session ID', 'only Session ID metadata remains')
-    assert(message() === 'Ready.' && target.querySelector('.transcript-viewport')!.textContent?.includes('Select a session from Sessions to begin.') && !target.querySelector('.transcript-viewport')!.textContent?.includes('Ready.'), 'base feedback and selection guidance are separate')
+    assert(message() === '' && target.querySelector('.transcript-viewport')!.textContent?.includes('Select a session from Sessions to begin.') && !target.querySelector('.transcript-viewport')!.textContent?.includes('Ready.'), 'base feedback and selection guidance are separate')
     assert(target.querySelector('.load-state')!.textContent === 'Idle' && (target.querySelector('[aria-label="Reset loaded session"]') as HTMLButtonElement).disabled, 'initial neutral state and Reset condition')
     checkHeaderRows()
-    assert(statusBackground() === 'rgb(226, 244, 232)', 'normal feedback has a green background')
-    assert(target.querySelector('.status-line-text')!.getBoundingClientRect().width < 100, 'short feedback is a content sized badge')
     await click(row(0)); await click(target.querySelector('[aria-label="Add to Collection"]'))
     const stable = JSON.stringify(bounds())
+    const searchTarget = target.querySelector<HTMLSelectElement>('[aria-label="Search target"]')!
+    const query = target.querySelector<HTMLInputElement>('[aria-label="Search query"]')!
+    assert(searchTarget.value === 'Session' && query.placeholder === 'Search all sessions...', 'default Session search placeholder')
+    const beforeSearch = JSON.stringify([reloads, flatCalls, hierarchyCalls, parses, exportedTargets, target.querySelector('.transcript-content')!.innerHTML])
+    for (const scope of ['Transcript', 'Session']) {
+      searchTarget.value = scope; searchTarget.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+      assert(query.placeholder === (scope === 'Session' ? 'Search all sessions...' : 'Search current transcript...'), 'placeholder updates immediately')
+      query.value = 'arbitrary query <>& 한글'; query.dispatchEvent(new Event('input', { bubbles: true })); await settle()
+      await click(target.querySelector('[aria-label="Search"]'))
+      assert(query.value === 'arbitrary query <>& 한글', 'query remains editable after submit')
+    }
+    assert(JSON.stringify([reloads, flatCalls, hierarchyCalls, parses, exportedTargets, target.querySelector('.transcript-content')!.innerHTML]) === beforeSearch, 'search submits have no backend, filtering or transcript side effects')
     assert(target.querySelector('.load-state')!.textContent === 'Loaded' && target.querySelector('.load-state')!.tagName === 'SPAN', 'Loaded badge is display only')
     assert([...target.querySelector('.header-controls')!.children].map(e => e.classList.contains('load-state') ? 'badge' : e.getAttribute('aria-label')).join() === 'badge,Refresh,Reset loaded session', 'header order is badge, Refresh, Reset')
     const resetButton = target.querySelector<HTMLButtonElement>('.reset-session-button')!
@@ -817,37 +828,37 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     holdReload = true; await click(reloadButton()); assert(message() === 'Loading sessions…', 'list progress reaches common status')
     failCopy = true; await click(button('Capture Transcript'))
     assert(message() === 'Capture failed.' && severity() === 'error' && target.querySelector('.load-state')!.textContent === 'Loaded', 'execution error is separate from successful session load')
-    assert(statusBackground() === 'rgb(253, 232, 231)', 'error feedback has a red background')
+    assert(statusAccent() === 'rgb(252, 165, 165)', 'dark error uses a red icon')
     releaseReload!(); holdReload = false; await settle()
     assert(message() === 'Capture failed.', 'list completion cannot hide Capture failure')
     failCopy = false; await click(button('Copy All')); assert(message() === 'Capture failed.', 'unrelated clipboard success cannot hide failure')
     await click(button('Capture Transcript')); assert(message() === 'Transcript copied to clipboard.' && severity() === 'success', 'same action recovery replaces its error')
-    assert(statusBackground() === 'rgb(226, 244, 232)', 'successful feedback has a green background')
+    assert(statusAccent() === 'rgb(74, 222, 128)', 'dark success uses a green icon')
     assert(JSON.stringify(bounds()) === stable, 'progress, errors and copy results do not change any upper or workspace height')
     cancelExport = true; await click(button('Export Worklog')); assert(message() === 'Worklog export cancelled.' && severity() === 'info', 'cancel is not success')
     cancelExport = false; await click(button('Export Worklog')); assert(message().startsWith('Worklog exported successfully:') && severity() === 'success', 'confirmed export succeeds')
     failFolderAfterExport = true; await click(button('Export Worklog')); assert(severity() === 'warning' && message().includes('folder could not be opened'), 'successful file export with folder failure is warning')
-    assert(statusBackground() === 'rgb(255, 244, 206)', 'warning feedback has a yellow background')
+    assert(statusAccent() === 'rgb(253, 186, 116)', 'dark warning uses an orange icon')
     await click(button('Copy All')); assert(severity() === 'warning', 'copy cannot hide Export warning')
     failFolderAfterExport = false; failExport = true; await click(button('Export Worklog')); assert(severity() === 'error' && message() === 'Target not safe to overwrite.', 'unsafe export has no false success')
     failExport = false; await click(button('Export Worklog'))
     reloadErrorMessage = 'Cannot read sessions: ' + 'long actionable error '.repeat(80); failReload = true; await click(reloadButton())
     assert(message() === reloadErrorMessage && severity() === 'error', 'full failure reaches one common location')
-    const text = target.querySelector<HTMLElement>('.status-line-text')!
+    const text = target.querySelector<HTMLElement>('.status-toast')!
     text.focus(); await settle()
-    assert(text.scrollWidth > text.clientWidth && getComputedStyle(text).whiteSpace === 'nowrap', 'long status remains a single truncated line')
-    assert(getComputedStyle(target.querySelector('.status-line-tooltip')!).visibility === 'visible' && target.querySelector('.status-line-tooltip')!.textContent === message(), 'keyboard focus reveals full error')
+    assert(getComputedStyle(target.querySelector('.toast-message')!).whiteSpace === 'pre-wrap' && text.scrollWidth <= text.clientWidth, 'long error wraps inside the toast')
+    assert(document.activeElement === text && target.querySelector('.toast-announcement')!.scrollHeight > target.querySelector('.toast-announcement')!.clientHeight, 'keyboard focus pauses dismissal while full error can be scrolled')
     assert(!target.querySelector('.navigator-messages,.action-status,.collection-copy-status,.transcript-action-status,.message-link-error'), 'local runtime feedback containers removed')
     for (const theme of ['Terminal Style','Markdown Style','DM Style','DM Style (Dark)']) {
       const select = target.querySelector('.theme-selector select')!; select.value = theme; select.dispatchEvent(new Event('change',{bubbles:true})); await settle()
-      assert(JSON.stringify(bounds()) === stable, 'four themes keep fixed status and workspace heights: ' + JSON.stringify({ theme, expected: stable, actual: bounds() }))
+      assert(JSON.stringify(bounds()) === stable, 'four themes keep fixed search and workspace heights: ' + JSON.stringify({ theme, expected: stable, actual: bounds() }))
       assert(message() === reloadErrorMessage, 'theme change preserves errors')
       checkHeaderRows()
-      assert(statusBackground() === 'rgb(253, 232, 231)', 'theme changes preserve the error background')
+      assert(statusAccent() === (theme === 'Terminal Style' || theme === 'DM Style (Dark)' ? 'rgb(252, 165, 165)' : 'rgb(185, 28, 28)'), 'theme changes preserve an accessible red error icon')
       const reset = target.querySelector<HTMLButtonElement>('[aria-label="Reset loaded session"]')!
       assert(!reset.disabled && getComputedStyle(reset).color === 'rgb(180, 35, 24)', 'enabled Reset remains red in every theme')
     }
-    failReload = false; await click(button('Retry Sessions')); assert(message() === 'Ready.', 'existing recovery returns to Ready')
+    failReload = false; await click(button('Retry Sessions')); assert(message() === '', 'existing recovery hides Ready')
     await click(button('Reset loaded session')); assert(status() === 'idle' && (target.querySelector('#collection-panel') as HTMLElement).hidden, 'Reset retains its lifecycle behavior')
     return { headerHeight: header.height, workspaceHeight: work.height, gained: work.height - 454 }
   } finally {
@@ -887,7 +898,7 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
       Storage.prototype.setItem = () => { throw new Error('Synthetic storage denial') }
       await toggle()
       assert(mode() === 'Hierarchical' && row(42), 'storage denial preserves view switch and loading')
-      assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be saved'), 'storage warning is visible')
+      assert(target.querySelector('.toast-message')!.textContent!.includes('could not be saved'), 'storage warning is visible')
     } finally { Storage.prototype.setItem = originalSet }
   } finally {
     await unmount(instance)
@@ -947,21 +958,21 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     localStorage.setItem(key, JSON.stringify({text:'Removed font',code:'Consolas'}))
     instance = mount(App,{target}); await settle()
     assert(target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.value === '' && target.querySelector<HTMLSelectElement>('[aria-label="Code font"]')!.value === 'Consolas', 'missing font defaults independently')
-    assert(target.querySelector('.status-line-text')!.textContent!.includes('not installed'), 'missing font warning')
+    assert(target.querySelector('.toast-message')!.textContent!.includes('not installed'), 'missing font warning')
     await unmount(instance)
     localStorage.setItem(key, '{invalid')
     instance = mount(App,{target}); await settle()
-    assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be read'), 'invalid saved setting warning')
+    assert(target.querySelector('.toast-message')!.textContent!.includes('could not be read'), 'invalid saved setting warning')
     const originalSet = Storage.prototype.setItem
     try {
       Storage.prototype.setItem = () => { throw new Error('Synthetic storage denial') }
       await selectFont('Text','Arial')
-      assert(family('#app-title').includes('Arial') && target.querySelector('.status-line-text')!.textContent!.includes('could not be saved'), 'storage failure retains effective choice with warning')
+      assert(family('#app-title').includes('Arial') && target.querySelector('.toast-message')!.textContent!.includes('could not be saved'), 'storage failure retains effective choice with warning')
     } finally { Storage.prototype.setItem = originalSet }
     await unmount(instance)
     failFonts = true
     instance = mount(App,{target}); await settle()
-    assert(target.querySelector('.status-line-text')!.textContent!.includes('could not be listed'), 'font enumeration failure reported')
+    assert(target.querySelector('.toast-message')!.textContent!.includes('could not be listed'), 'font enumeration failure reported')
     assert(!target.querySelector<HTMLSelectElement>('[aria-label="Text font"]')!.disabled, 'Default remains available after failure')
   } finally {
     await unmount(instance); localStorage.removeItem(key); failFonts = false; widthFixture = false
@@ -997,4 +1008,52 @@ let infoBaseline: { parses: number; block: Element | null; collection: string | 
     if (originalClipboard) Object.defineProperty(navigator,'clipboard',originalClipboard)
     else delete (navigator as any).clipboard
   }
+}
+
+// Exercise the production Toast through the existing Worklog operation flow.
+;(globalThis as any).__toastDesignShow = async (theme: string, severity: string) => {
+  if (releaseExport) { holdExport = false; releaseExport(); releaseExport = null; await settle() }
+  const geometry = () => ['.app-header', '.search-row', '.observatory-workspace', '.workspace-transcript', '.workspace-collection']
+    .map(selector => { const r = target.querySelector(selector)!.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })
+  const baseline = JSON.stringify(geometry())
+  const prior = target.querySelector('.status-toast')
+  const priorMessage = target.querySelector('.toast-message')?.textContent
+  const select = target.querySelector<HTMLSelectElement>('.theme-selector select')!
+  select.value = theme; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+  if (prior) assert(target.querySelector('.status-toast') === prior && target.querySelector('.toast-message')?.textContent === priorMessage, 'theme switches update the mounted Toast without replacing feedback')
+  const dark = theme === 'Terminal Style' || theme === 'DM Style (Dark)'
+  const surface = dark ? 'rgb(32, 36, 43)' : 'rgb(248, 250, 252)'
+  if (prior) assert(getComputedStyle(prior).backgroundColor === surface, 'visible Toast changes palette immediately')
+  cancelExport = severity === 'info'; failFolderAfterExport = severity === 'warning'
+  failExport = severity === 'error'; holdExport = severity === 'progress'
+  await click(button('Export Worklog'))
+  cancelExport = false; failFolderAfterExport = false; failExport = false
+  const card = target.querySelector<HTMLElement>('.status-toast')!
+  const title = card.querySelector<HTMLElement>('.toast-label')!
+  const message = card.querySelector<HTMLElement>('.toast-message')!
+  const icon = card.querySelector<HTMLElement>('.toast-icon')!
+  const close = card.querySelector<HTMLElement>('.toast-dismiss')!
+  const style = getComputedStyle(card)
+  assert(card.dataset.severity === severity && icon.dataset.icon === severity, 'matching status icon and title')
+  assert(style.backgroundColor === surface && style.borderTopColor === (dark ? 'rgb(72, 81, 95)' : 'rgb(203, 213, 225)'), 'dedicated neutral theme surface and border')
+  assert(getComputedStyle(title).color === (dark ? 'rgb(241, 245, 249)' : 'rgb(23, 32, 51)'), 'theme title ink')
+  assert(getComputedStyle(message).color === (dark ? 'rgb(203, 213, 225)' : 'rgb(51, 65, 85)'), 'theme body ink')
+  const contrast = (a: string, b: string) => {
+    const luminance = (color: string) => color.match(/\d+/g)!.slice(0, 3).map(Number).map(c => {
+      const channel = c / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4
+    }).reduce((sum, channel, i) => sum + channel * [.2126, .7152, .0722][i], 0)
+    const values = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (values[0] + .05) / (values[1] + .05)
+  }
+  assert(contrast(getComputedStyle(title).color, surface) >= 4.5 && contrast(getComputedStyle(message).color, surface) >= 4.5, 'title and message contrast')
+  assert(contrast(getComputedStyle(icon).color, surface) >= 3, 'status icon contrast')
+  const r = card.getBoundingClientRect(), i = icon.getBoundingClientRect(), t = title.getBoundingClientRect(), c = close.getBoundingClientRect()
+  assert(r.width === 360 && r.height < 150 && Math.abs(r.right - (innerWidth - 20)) < 1 && Math.abs(r.bottom - (innerHeight - 20)) < 1, 'compact bottom-right card')
+  assert(i.right < t.left && t.right < c.left && Math.abs((i.top + i.bottom) - (c.top + c.bottom)) <= 2, 'icon, title and close share the first row')
+  assert(message.getBoundingClientRect().top >= i.bottom + 5, 'message begins on the second row')
+  const workspace = target.querySelector('.observatory-workspace')!.getBoundingClientRect()
+  assert(r.width * r.height / (workspace.width * workspace.height) < .1, 'ordinary Toast occupies less than ten percent of the workspace')
+  assert(JSON.stringify(geometry()) === baseline && target.querySelector('.search-row')!.getBoundingClientRect().height === 44, 'Toast leaves header and all three panels unchanged')
+  assert((severity === 'progress') === !!card.querySelector('.toast-spinner'), 'only Progress uses a spinner')
+  return { theme, severity, width: r.width, height: r.height, background: surface, x: r.x, y: r.y }
 }

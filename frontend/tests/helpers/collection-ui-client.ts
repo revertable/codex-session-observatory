@@ -68,15 +68,15 @@ const click = async (label: string) => {
     assert((target.querySelector('[aria-label="Capture Transcript"]') as HTMLButtonElement).disabled, 'Capture disabled without session')
     assert((target.querySelector('[aria-label="Copy All"]') as HTMLButtonElement).disabled && (target.querySelector('[aria-label="Clear Collection"]') as HTMLButtonElement).disabled, 'empty Collection actions disabled')
     await click('Session fixture')
-    const status = target.querySelector('.status-line-text') as HTMLElement
+    const status = () => target.querySelector('.toast-message')?.textContent ?? ''
     const resume = target.querySelector('.resume-row') as HTMLElement
     const emptyHeight = resume.getBoundingClientRect().height
-    assert(status.textContent === 'Ready.', 'base state is Ready')
+    assert(status() === '', 'Ready is hidden')
     await click('Copy Resume Command')
-    assert(copied === 'codex resume test' && status.textContent === 'Copied to clipboard.', 'copy notice retained')
+    assert(copied === 'codex resume test' && status() === 'Copied to clipboard.', 'copy notice retained')
     assert(resume.getBoundingClientRect().height === emptyHeight, 'copy feedback never resizes Resume row')
     await click('Refresh')
-    assert(status.textContent === 'Ready.', 'successful Refresh returns to Ready')
+    assert(status() === '', 'successful Refresh hides Ready')
     assert(resume.getBoundingClientRect().height === emptyHeight, 'resume row returns to initial height')
 
     const toolFilter = Array.from(target.querySelectorAll('label')).find(label => label.textContent?.trim() === 'Tool calls')!.querySelector('input')!
@@ -103,7 +103,7 @@ const click = async (label: string) => {
     assert(copied === expected, 'clipboard header and raw body match panel')
     await click('Capture Transcript')
     assert(copied.includes('A\nSecond line') && copied.includes('original line') && panel.querySelectorAll('article').length === 3, 'Capture retains content and Collection state')
-    assert(target.querySelector('.status-line-text')?.textContent === 'Transcript copied to clipboard.', 'existing Capture feedback moved to header')
+    assert(status() === 'Transcript copied to clipboard.', 'existing Capture feedback reaches Toast')
 
     const bottom = () => (target.querySelector('.transcript-viewport') as HTMLElement).scrollHeight - (target.querySelector('.transcript-viewport') as HTMLElement).clientHeight
     assert(bottom() > 0, 'fixture requires a scrollable Transcript')
