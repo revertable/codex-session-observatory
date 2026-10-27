@@ -1,4 +1,4 @@
-Codex Session Observatory 2.0.1 - Portable Windows Build
+Codex Session Observatory 2.1.0 - Portable Windows Build
 =====================================================
 
 English
