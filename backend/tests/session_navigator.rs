@@ -11,25 +11,37 @@ use serde_json::{Value, json};
 use std::{
     collections::HashSet,
     fs,
-    io::Cursor,
+    io::{self, Cursor, Write},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("target/navigator-tests")
-            .join(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-                    .to_string(),
-            );
-        fs::create_dir_all(path.join("sessions")).unwrap();
-        Self(path)
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        Self::new_in(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("target/navigator-tests"),
+            &NEXT_ID,
+        )
+        .expect("create navigator fixture")
+    }
+    fn new_in(base: &Path, next_id: &AtomicU64) -> io::Result<Self> {
+        fs::create_dir_all(base)?;
+        loop {
+            let id = next_id.fetch_add(1, Ordering::Relaxed);
+            let path = base.join(format!("{}-{id}", std::process::id()));
+            // Only a successful atomic create grants ownership of this path.
+            match fs::create_dir(&path) {
+                Ok(()) => {
+                    let fixture = Self(path);
+                    fs::create_dir(fixture.0.join("sessions"))?;
+                    return Ok(fixture);
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error),
+            }
+        }
     }
     fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {
         let path = self.0.join(name);
@@ -54,9 +66,99 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).unwrap();
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            // Reporting must also tolerate a closed or unavailable stderr.
+            let _ = writeln!(
+                io::stderr().lock(),
+                "Failed to remove navigator fixture {}: {error}",
+                self.0.display()
+            );
+        }
     }
 }
+
+#[test]
+fn fixture_creation_preserves_existing_paths() {
+    let owner = Fixture::new();
+    let next_id = AtomicU64::new(0);
+    let first = Fixture::new_in(&owner.0, &next_id).unwrap();
+    let marker = first.write("marker", b"first fixture");
+    let blocked = owner.0.join(format!("{}-1", std::process::id()));
+    fs::write(&blocked, b"existing file").unwrap();
+
+    // Simulate stale entries after a process ID is reused.
+    next_id.store(0, Ordering::Relaxed);
+    let second = Fixture::new_in(&owner.0, &next_id).unwrap();
+    assert_ne!(first.0, second.0);
+    drop(second);
+    assert_eq!(fs::read(marker).unwrap(), b"first fixture");
+    assert_eq!(fs::read(blocked).unwrap(), b"existing file");
+}
+
+#[test]
+fn concurrent_fixtures_keep_independent_contents_and_cleanup() {
+    let owner = Fixture::new();
+    let next_id = AtomicU64::new(0);
+    let mut fixtures = std::thread::scope(|scope| {
+        let workers = (0..8)
+            .map(|_| {
+                scope.spawn(|| {
+                    (0..8)
+                        .map(|_| {
+                            let fixture = Fixture::new_in(&owner.0, &next_id).unwrap();
+                            fixture.write("marker", b"owned");
+                            fixture
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let paths = fixtures
+        .iter()
+        .map(|fixture| fixture.0.clone())
+        .collect::<HashSet<_>>();
+    assert_eq!(paths.len(), 64);
+    let removed = fixtures.pop().unwrap();
+    let removed_path = removed.0.clone();
+    drop(removed);
+    assert!(!removed_path.exists());
+    for fixture in &fixtures {
+        assert_eq!(fs::read(fixture.0.join("marker")).unwrap(), b"owned");
+        assert!(fixture.0.join("sessions").is_dir());
+    }
+    drop(fixtures);
+    assert!(paths.iter().all(|path| !path.exists()));
+}
+
+#[cfg(windows)]
+#[test]
+fn fixture_cleanup_failure_preserves_the_original_panic() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let fixture = Fixture::new();
+    let root = fixture.0.clone();
+    let path = fixture.write("locked", b"keep for diagnosis");
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&path)
+        .unwrap();
+    let panic = std::panic::catch_unwind(move || {
+        let _fixture = fixture;
+        panic!("original test failure");
+    })
+    .unwrap_err();
+    assert_eq!(panic.downcast_ref::<&str>(), Some(&"original test failure"));
+    assert!(root.exists());
+    drop(lock);
+    assert_eq!(fs::read(path).unwrap(), b"keep for diagnosis");
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn lines(values: Vec<Value>) -> String {
     values
         .into_iter()
