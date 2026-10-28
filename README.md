@@ -64,8 +64,12 @@ The **Loaded** badge reports state; the adjacent **X** resets the loaded session
 
 ## Local processing and project information
 
-Session content is processed locally. At startup, an optional GitHub Releases check can report a newer public release or an unpublished development version; it sends no session content, selected paths, or session IDs. It does not download or install updates. External links open only through explicit user actions.
+Session content is processed locally. At startup, an automatic GitHub Releases check can report a newer public release or an unpublished development version; it sends no session content, selected paths, or session IDs. The current app has no in-app setting to disable this request. GitHub receives connection and request metadata as described in the privacy section of the [Code signing policy](docs/code-signing-policy.md#privacy-policy). It does not download or install updates. External links open only through explicit user actions.
 
 The [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon) describes the related approach to observable AI-assisted work. This project follows [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer), rebuilt with Rust, Svelte, and Tauri.
 
 For source builds and architecture, see the [development guide](frontend/README.md). Verification is documented in the [test matrix](docs/test-matrix.md). Version-specific changes belong in [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases).
+
+## Code signing policy
+
+See the [Code signing policy](docs/code-signing-policy.md). The policy is a draft for the SignPath Foundation application; code signing is not enabled.

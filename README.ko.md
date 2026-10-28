@@ -64,8 +64,12 @@ Worklog는 각 사용자 요청부터 다음 요청 전까지의 Codex 응답·�
 
 ## 로컬 처리와 프로젝트 정보
 
-세션 내용은 로컬에서 처리합니다. 시작 시 선택적인 GitHub Releases 확인으로 최신 공개 버전이나 미공개 개발 버전을 안내할 수 있으며, 세션 내용·선택 경로·세션 ID를 전송하지 않습니다. 업데이트를 내려받거나 설치하지 않습니다. 외부 링크는 사용자가 직접 선택할 때 엽니다.
+세션 내용은 로컬에서 처리합니다. 시작 시 자동으로 GitHub Releases를 확인해 최신 공개 버전이나 미공개 개발 버전을 안내할 수 있으며, 세션 내용·선택 경로·세션 ID를 전송하지 않습니다. 현재 앱에는 이 요청을 비활성화하는 설정이 없습니다. GitHub가 처리하는 연결·요청 메타데이터는 [Code signing policy의 개인정보 항목](docs/code-signing-policy.md#privacy-policy)에 설명합니다. 업데이트를 내려받거나 설치하지 않습니다. 외부 링크는 사용자가 직접 선택할 때 엽니다.
 
 관련 관측 접근 방식은 [Cosmic Horizon Archive](https://riu-salze-studio.gitbook.io/cosmic-horizon)에서 볼 수 있습니다. 이 프로젝트는 [Codex Chat Viewer](https://github.com/revertable/codex-chat-viewer)를 이어 Rust, Svelte, Tauri로 다시 구축했습니다.
 
 소스 빌드와 구조는 [개발 안내](frontend/README.md), 검증은 [테스트 매트릭스](docs/test-matrix.md)를 참조하세요. 버전별 변경 사항은 [GitHub Releases](https://github.com/revertable/codex-session-observatory/releases)에 정리합니다.
+
+## Code signing policy
+
+[Code signing policy](docs/code-signing-policy.md)를 참조하세요. SignPath Foundation 신청을 위한 초안이며, 코드서명은 아직 적용되지 않았습니다.
